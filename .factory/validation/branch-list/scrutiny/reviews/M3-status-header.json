@@ -1,0 +1,57 @@
+{
+  "milestoneId": "M3-branch-list",
+  "featureId": "M3-status-header",
+  "commit": "225a5a9",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "StatusHeaderView is split into the required stateful outer (`StatusHeaderView`) + pure presentational inner (`StatusHeaderContent`), which takes `summary: StatusSummary?`, `isLoading`, `lastError` — exactly the hermetic-snapshot shape the task brief asked for. 7 ViewModel tests cover clean/staged/modified/untracked/mixed/detachedHEAD/aheadBehind via real git fixtures (including a clever two-workdir setup for divergence). 5 snapshot references cover clean, staged+modified, detached, ahead/behind, dark — all md5-distinct. The ahead/behind cluster correctly gates on `upstream != nil` AND (ahead > 0 || behind > 0) so a newly-created local branch doesn't render a misleading '0 ahead 0 behind'. FSWatcher refresh loop wired via `.onChange(of: focus.lastChangeAt)` closes VAL-REPO-010. Single-line RootView change (BranchListView → BranchPaneView) is correctly scoped. No off-limits flags, all git calls through focus.queue.run.",
+    "issues": [
+      {
+        "file": "Sources/Views/Detail/StatusHeaderView.swift",
+        "line": 77,
+        "severity": "medium",
+        "description": "`StatusHeaderContent.placeholder` is a `@MainActor static var` that duplicates ~12 lines of HStack boilerplate from the main body (branch icon + 'No repository' text + same frame/padding/background). DRY violation: if the header chrome changes, two sites drift. Extract the chrome into a `private func headerChrome<Content: View>(@ViewBuilder content: () -> Content)` modifier or use the main body's existing branchLabel+separator pattern with a nil-summary branch. Also: the placeholder's `@MainActor` annotation is redundant since `StatusHeaderContent: View` already inherits MainActor isolation."
+      },
+      {
+        "file": "Sources/Views/Detail/StatusHeaderView.swift",
+        "line": 33,
+        "severity": "low",
+        "description": "Same `.onChange(of: focus.lastChangeAt) { Task { await model.reload(...) } }` pattern as BranchListView — no cancellation of a prior in-flight reload. Since StatusHeaderView and BranchListView both reload on every tick and both go through `focus.queue`, a fast FSEvents burst (staged commit + amend, say) can queue 4-6 git probes. Individually each completes in tens of ms so the user won't notice, but it's wasteful. Consider a shared `async reloadAll(focus:)` on RepoFocus that tells all its observing models to reload together under a single cancellation token. Non-blocking; raise to M5 if auto-fetch timing reveals churn."
+      },
+      {
+        "file": "Sources/Views/Detail/StatusHeaderView.swift",
+        "line": 186,
+        "severity": "low",
+        "description": "The ahead/behind cluster uses `Label(\"\\(summary.ahead)\", systemImage: \"arrow.up\")` with `.labelStyle(.titleAndIcon)`. Under tight width the icon+digit pair will collapse to just the digit on macOS — the monospaced-digit design will keep the counts stable but the directional cue is lost. Non-blocking for M3's 360px reference, but once M4 adds the graph and the split tightens, verify the header still renders legibly at 260px min column width. A dedicated testNarrowColumn snapshot would guard this before M4."
+      },
+      {
+        "file": "Sources/ViewModels/StatusHeaderModel.swift",
+        "line": 28,
+        "severity": "low",
+        "description": "Like BranchListModel.lastFSTick, the field is set on every reload but never read. Same disposition: delete or add an intent comment. Keep both models symmetric — if one gets a real dedupe gate, the other should too."
+      },
+      {
+        "file": "Tests/KiteTests/ViewModelTests/StatusHeaderModelTests.swift",
+        "line": 124,
+        "severity": "low",
+        "description": "Test case `testUntracked` has the XCTest-style `test` prefix while every other @Test in the suite uses a Swift-Testing descriptive name (`reload populates local branches`, `clean tree`). Consistency nit — rename to `untracked` to match the rest. Will not fail the run."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "architecture",
+      "observation": "The stateful-outer + pure-inner view split for snapshot testability is a clean pattern. Codify in AGENTS.md or skills/swiftui-worker/SKILL.md: 'Views that own @Observable models should split into ContainerView (pulls env, owns @State model) + ContentView (takes plain values). Snapshot tests drive the ContentView directly; UI tests drive the ContainerView end-to-end.' This should be the template for M4 GraphScrollContainer, M5 ToastHost, M6 CreateBranchSheet, M7 DiffPane.",
+      "evidence": "Sources/Views/Detail/StatusHeaderView.swift lines 18-41 + lines 47-208"
+    },
+    {
+      "area": "conventions",
+      "observation": "Both BranchListView and StatusHeaderView own their own @Observable model via @State — so RepoStore is effectively environment/ambient state and per-feature models are locally-owned. This is a sensible cut, but it means every new 'observe the focused repo' feature will spawn a new parallel reload on every tick. Document the expected model count per focused repo in INTERFACES.md so future workers know whether to add another @State or consolidate into a shared RepoDetailModel.",
+      "evidence": "Sources/Views/Detail/StatusHeaderView.swift line 20 + Sources/Views/Detail/BranchListView.swift line 20"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-BRANCH-005", "VAL-REPO-010"],
+    "unverified": []
+  }
+}

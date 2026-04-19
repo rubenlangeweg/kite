@@ -1,0 +1,185 @@
+{
+  "milestone": "branch-list",
+  "round": 1,
+  "status": "pass-with-non-blocking-issues",
+  "validatorsRun": {
+    "xcodegen": {
+      "exitCode": 0,
+      "observation": "xcodegen generate: project regenerated cleanly."
+    },
+    "build": {
+      "exitCode": 0,
+      "observation": "xcodebuild -scheme Kite -configuration Debug build: ** BUILD SUCCEEDED ** with zero warnings (confirmed after fresh xcodegen)."
+    },
+    "test": {
+      "exitCode": 0,
+      "observation": "xcodebuild test -scheme Kite -destination 'platform=macOS' -only-testing:KiteTests: 123 Swift Testing cases in 19 suites + 19 XCTest snapshot cases in 4 suites = 142 tests green in 40.2s. New this milestone: GitQueue (3), RepoFocus (4), RepoStore (4), RepoSidebarModel ext (1), BranchListModel (6), StatusHeaderModel (7), BranchListSnapshot (5), StatusHeaderSnapshot (5). 107 prior tests still green. KiteUITests NOT run (TCC blocker per explicit direction)."
+    },
+    "swiftformat": {
+      "exitCode": 0,
+      "observation": "swiftformat Sources Tests --lint: 0/76 files require formatting."
+    },
+    "swiftlint": {
+      "exitCode": 0,
+      "observation": "swiftlint --strict: 0 violations, 0 serious in 76 files."
+    },
+    "snapshotMd5Audit": {
+      "exitCode": 0,
+      "observation": "All 10 new reference PNGs md5-distinct. BranchListSnapshotTests: 603206ef (dark), 4f580a76 (detachedHead), 13ec1365 (emptyState), 2d520d49 (localOnly), bd21787e (withRemotes-light). StatusHeaderSnapshotTests: a11af65a (clean), e5adb52c (dark), 0403a343 (detached), dfc8a4c8 (stagedModified-light), fe2637b0 (withAheadBehind). Dark vs light of same composition differ by ≥2M-bit MD5 distance — the `NSHostingController.view.appearance = .darkAqua` fix from AGENTS.md Established patterns is correctly applied."
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 0,
+    "passedWithNonBlocking": 3,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "M3-repo-focus-lifecycle",
+      "file": "Sources/Repo/GitQueue.swift",
+      "line": 68,
+      "description": "CompletionGate is `@unchecked Sendable` with no justification doc-comment — same pattern we flagged on FSWatcher in foundation. Add one-line justification: NSLock serializes reads/writes of fired+waiter; CheckedContinuation is single-writer/single-reader."
+    },
+    {
+      "featureId": "M3-repo-focus-lifecycle",
+      "file": "Sources/Repo/RepoFocus.swift",
+      "line": 46,
+      "description": "`rootTask: Task<Void, Never>?` is declared and cancelled on shutdown/deinit but never assigned. Reserved for M5 sidecar streams per handoff. Either delete until needed, or add a `// M5-reserved` comment so it reads as infrastructure rather than dead code."
+    },
+    {
+      "featureId": "M3-repo-focus-lifecycle",
+      "file": "Sources/ViewModels/RepoSidebarModel.swift",
+      "line": 94,
+      "description": "`select(_:)` writes lastOpenedRepo to persistence AND forwards to `repoStore?.focus(on:)` which ALSO writes the same key. Handoff justifies the double-write for nil-repoStore configurations; add an inline comment so the next reader doesn't think it's forgotten duplication."
+    },
+    {
+      "featureId": "M3-branch-list",
+      "file": "Sources/ViewModels/BranchListModel.swift",
+      "line": 92,
+      "description": "`probeDetachedHead` fires three sequential `focus.queue.run` calls — each a subprocess spawn. ~15-30ms overhead per reload beyond the branch listings. Consider collapsing into one or two commands. Tighten before M5 auto-fetch tightens timing."
+    },
+    {
+      "featureId": "M3-branch-list",
+      "file": "Sources/ViewModels/BranchListModel.swift",
+      "line": 31,
+      "description": "`lastFSTick` is assigned but never read — pure dead field. Same disposition for StatusHeaderModel.lastFSTick (L28): delete until needed, or add intent comment."
+    },
+    {
+      "featureId": "M3-branch-list",
+      "file": "Sources/Views/Detail/BranchListView.swift",
+      "line": 59,
+      "description": "`.onChange(of: focus.lastChangeAt) { Task { await model.reload(for: focus) } }` spawns unstructured Task per tick — no cancellation of prior in-flight reload. Same pattern in StatusHeaderView L33. Fast FSEvents burst can queue 4-6 git probes. Non-blocking (GitQueue serializes, correctness preserved) but wasteful; consolidate into a RepoFocus-level 'reloadAll' or a per-model serial-Task handle before M5."
+    },
+    {
+      "featureId": "M3-branch-list",
+      "file": "Sources/Views/Detail/BranchRow.swift",
+      "line": 55,
+      "description": "The `pills` ViewBuilder with nested conditionals is readable but not structurally unit-testable. Extracting the branch → [PillSpec] mapping into a private func would let us add a 'gone + ahead present → gone only' regression test without a snapshot diff."
+    },
+    {
+      "featureId": "M3-status-header",
+      "file": "Sources/Views/Detail/StatusHeaderView.swift",
+      "line": 77,
+      "description": "`StatusHeaderContent.placeholder` duplicates the main body's HStack chrome (icon + text + frame/padding/background). DRY violation: chrome change requires two updates. Extract to a shared `headerChrome` modifier."
+    },
+    {
+      "featureId": "M3-status-header",
+      "file": "Sources/Views/Detail/StatusHeaderView.swift",
+      "line": 186,
+      "description": "Under tight split widths (<300px) the `Label(count, systemImage: arrow.up)` ahead/behind cluster may render with iconography suppressed — verify legibility via a new testNarrowColumn snapshot before M4 tightens the split."
+    },
+    {
+      "featureId": "M3-status-header",
+      "file": "Tests/KiteTests/ViewModelTests/StatusHeaderModelTests.swift",
+      "line": 124,
+      "description": "Test case `testUntracked` uses XCTest-style `test` prefix while other @Test cases use descriptive names. Rename to `untracked` for consistency."
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "file": "AGENTS.md",
+      "change": "Add under Established patterns: 'Stateful view + pure content view split. SwiftUI views that own an @Observable model should split into (a) an outer `ContainerView` that pulls environment + @State + drives task/onChange lifecycle, and (b) an inner `ContentView` whose init takes plain-data parameters (the model's exposed fields, not the model itself). Snapshot tests drive the inner `ContentView` directly for hermetic captures across every visual branch; XCUITests drive the `ContainerView` for the real wiring. M3-status-header's StatusHeaderView/StatusHeaderContent split is the canonical example.'",
+      "rationale": "M3-status-header implemented the pattern perfectly; M3-branch-list used a less-split approach (BranchListView is monolithic + BranchRow). M4 graph container, M5 toast host, M6 branch sheet, M7 diff pane will all benefit from codification."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Add under Known gotchas → Swift actors: 'Swift actors serialize mailbox arrival but are REENTRANT across `await` suspension points inside a method body. `actor Q { func run(body) { try await body() } }` does NOT serialize two callers whose bodies suspend — caller 2's body can begin while caller 1's body is awaiting. For ops that must not overlap across suspension (e.g. subprocess that locks `.git/index.lock`), use an explicit completion-gate chain: each `run` captures the prior gate, installs its own, awaits the prior, runs body, and fires its own gate in a defer. See `Sources/Repo/GitQueue.swift` for the canonical implementation.'",
+      "rationale": "GitQueue discovered this non-trivially (the feature brief's suggested trivial impl would NOT have met VAL-NET-009). Codify so M5-auto-fetch and any future per-repo actor don't re-learn it under time pressure."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Add under Testing guidance: 'Avoid `@unchecked Sendable` without a one-line doc-comment explaining why the concurrent access pattern is safe. Two instances in the codebase (FSWatcher, GitQueue.CompletionGate) are correct but provide no written justification; future maintainers have no quick way to verify safety. Minimum bar: `// Safe: <what protects which fields>`.'",
+      "rationale": "Repeated pattern across two features. Codify before M4 introduces more actor-adjacent types."
+    },
+    {
+      "file": "INTERFACES.md",
+      "change": "Add under §4 Shared state rules: 'Per-focus observation fan-out. Every @Observable view model that observes `focus.lastChangeAt` spawns its own reload per FSWatcher tick — BranchListModel, StatusHeaderModel. As M4/M5/M7 add LogModel/GraphModel/DiffModel, N concurrent git probes per tick becomes wasteful. Workers introducing a 3rd+ focus-observing model should either (a) consolidate into a shared RepoDetailModel that fans out, or (b) open a scrutiny ticket to refactor before committing. GitQueue serialization keeps correctness but not cost.'",
+      "rationale": "Two observers today is fine; four observers tomorrow is a reload storm. Documented boundary before it becomes a retrofit."
+    },
+    {
+      "file": "skills/git-engine-worker/SKILL.md",
+      "change": "Document the 'probe with minimum subprocess count' discipline: when a model needs multiple git queries to compute state, prefer composing fewer commands (`git rev-parse A B C` over three separate invocations). Each `Git.run` spawns /usr/bin/git and waits for exit; three probes = ~30ms of pure process overhead. BranchListModel.probeDetachedHead currently fires three sequential probes; a single `rev-parse --symbolic-full-name` + `rev-parse --short HEAD` composition would halve it.",
+      "rationale": "M4 graph and M7 diff will both be tempted to do per-field probing. Codify the 'minimize subprocesses' principle now."
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilledThisMilestone": [
+      "VAL-BRANCH-001",
+      "VAL-BRANCH-002",
+      "VAL-BRANCH-003",
+      "VAL-BRANCH-004",
+      "VAL-BRANCH-005",
+      "VAL-NET-009",
+      "VAL-NET-010",
+      "VAL-REPO-010"
+    ],
+    "anyOrphansOrFailures": [
+      {
+        "assertion": "VAL-BRANCH-006",
+        "status": "partial",
+        "note": "Not scoped to M3 — scheduled for M5-fetch ('After successful fetch, branch list ahead/behind updates without manual ⌘R'). M3 wires the refresh mechanism (BranchListView reloads on focus.lastChangeAt); M5 must trigger it after fetch completion. Correctly scoped in features.json."
+      },
+      {
+        "assertion": "VAL-REPO-010",
+        "status": "fulfilled",
+        "note": "The full FSEvents → focus.lastChangeAt → model.reload loop is now closed end-to-end by StatusHeaderView's wiring. The authored XCUITest `testStatusHeaderRefreshesOnExternalChange` will exercise the 2s gate on a TCC-accepting host. M1-fs-watcher originally claimed this as 'partial' pending wiring; M3-status-header's wiring closes it."
+      },
+      {
+        "assertion": "VAL-NET-009",
+        "status": "fulfilled",
+        "note": "GitQueue.serializesConcurrentOps directly demonstrates mail-ordered body execution across suspension — even stronger than the minimum VAL-NET-009 wording ('two simultaneous ops run sequentially'). The CompletionGate chain is the correct implementation, verified."
+      },
+      {
+        "assertion": "VAL-NET-010",
+        "status": "partial",
+        "note": "Window-close cancellation of in-flight git processes is covered at the mechanism level (Task.cancel → Process.terminate via M1-git-engine + RepoFocus.shutdown) but the full 'close window, pgrep -P shows zero' check is a manual step per features.json and requires an interactive run. Unit test `cancellationPropagates` confirms CancellationError propagates through the queue, so the wiring is sound."
+      }
+    ]
+  },
+  "carryOverObservations": [
+    {
+      "area": "foundation round 1 carry-overs",
+      "status": "unchanged",
+      "note": "Git.run 64KB pipe-buffer deadlock (L55), Git.run cancel race (L82), missing GitError.remoteRejected (L5), DiffParser quoted-path form (L216), ProgressParser consume-all (L40), LogParser Swift-5.10 if-expr (L59), RefKind.head dead case (L12), Persistence per-field keys (L27), PersistenceStore silent swallow (L160), setWindowFrame debounce (L105), FSWatcher.start() post-stop silent no-op (L88), FSWatcher @unchecked-Sendable rationale (L24), README swiftformat flag order (L38), EmptyCommands VAL-UI-009 regression (L11) — all still open, none regressed, all scoped to later milestones per the original synthesis."
+    },
+    {
+      "area": "repo-list round 1 carry-overs",
+      "status": "unchanged",
+      "note": "SettingsRootsTab degenerate snapshots (MD5 d10d012d × 4), RepoSidebar dark-mode byte-identical (MD5 b519ca7d/47fe1945), xcodegen auto-resources missing excludes in project.yml, RepoSidebarModel.refresh double-trigger, SettingsRootsTab transient models duplication, PersistenceStore load/write still swallow errors, DiscoveredRepo.id = URL (symlink duplication) — all still open, all scoped for post-TCC-unblock user-testing or later milestones. NONE of M3's new snapshots fell into the degenerate trap (the NSAppearance fix is correctly applied)."
+    },
+    {
+      "area": "new concerns introduced this milestone",
+      "status": "non-blocking",
+      "note": "Per-tick reload fan-out across @Observable models (BranchListModel + StatusHeaderModel → 2 reloads per tick → 6+ git probes after the detached-HEAD probe multi-step). No correctness impact; efficiency concern only."
+    }
+  ],
+  "deferredUserTestingFollowUps": [
+    "Run Tests/KiteUITests/BranchListUITests.swift (3 cases) and StatusHeaderUITests.swift (3 cases) on a TCC-unblocked host; VAL-BRANCH-001..005 + VAL-REPO-010 gain end-to-end evidence.",
+    "Visually verify Dark appearance renders correctly at narrow (260px) and wide (520px) middle-column widths.",
+    "Verify FSEvents refresh loop via the '2s gate' in testStatusHeaderRefreshesOnExternalChange once XCUITest runs."
+  ],
+  "previousRound": null
+}

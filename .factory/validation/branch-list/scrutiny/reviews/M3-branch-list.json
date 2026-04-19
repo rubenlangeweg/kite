@@ -1,0 +1,63 @@
+{
+  "milestoneId": "M3-branch-list",
+  "featureId": "M3-branch-list",
+  "commit": "1f90eb2",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "BranchListModel + BranchListView + BranchRow implement the middle column's upper pane cleanly. All git calls go through `focus.queue.run { ... }` (verified grep-level). The remote-HEAD filter correctly matches on `fullName.hasSuffix(\"/HEAD\")` — the handoff's discoveredIssue is well-researched: `refname:short` strips the trailing `/HEAD` to leave just the remote name, so a shortName-based filter would miss it. Ahead/behind/gone/no-upstream pills use the existing `BranchParser`. Detached-HEAD probe is three-step (symbolic-ref → rev-parse verify → rev-parse --short) and distinguishes unborn-HEAD (empty repo) from true detach. Current branch marked with circle.fill + semibold. 6 real-git fixture-based unit tests all green, all four VAL-BRANCH-00x assertions covered. 5 snapshot references, all md5-distinct (including dark-mode via NSHostingController.appearance = .darkAqua — the fix for the degenerate-dark-snapshot trap from M2). 3 XCUITests authored (gated on TCC-accepting host per explicit task direction).",
+    "issues": [
+      {
+        "file": "Sources/ViewModels/BranchListModel.swift",
+        "line": 92,
+        "severity": "medium",
+        "description": "probeDetachedHead fires THREE sequential `focus.queue.run` calls (symbolic-ref → rev-parse --verify → rev-parse --short). Each wraps a Git.run subprocess invocation, each serializes against any concurrent StatusHeaderModel reload or future fetch. Three spawn-exit-parse cycles per reload is ~15-30ms overhead on top of the branch listings. Consider inlining into a single `git rev-parse --symbolic-full-name --verify HEAD` + `git rev-parse --short HEAD` composition, or collapse into one `git for-each-ref` + symbolic-ref probe. Non-blocking for M3 (reloads are infrequent) but worth cleaning before M5's auto-fetch-every-5-min tightens the timing."
+      },
+      {
+        "file": "Sources/ViewModels/BranchListModel.swift",
+        "line": 31,
+        "severity": "low",
+        "description": "`lastFSTick` is assigned on every reload but never read — pure dead code. The handoff acknowledges this is intentional (observation-ignored field kept for future dedupe). Either delete it until M5 needs it, or land a one-line comment on the declaration pointing at the M5 intended use so it reads as infrastructure rather than leftover debug code."
+      },
+      {
+        "file": "Sources/ViewModels/BranchListModel.swift",
+        "line": 59,
+        "severity": "low",
+        "description": "`.onChange(of: focus.lastChangeAt)` spawns an unstructured `Task { await model.reload(for: focus) }` on every FSWatcher tick. If the previous reload is still in flight (slow filesystem, contested queue) the new reload enqueues behind it and both complete — the second overwriting the first's state. Not a correctness bug (the second result is newer) but wasteful. Consider a serial Task handle (cancel prior before starting new) inside BranchListModel — the pattern the worker's own whatWasLeftUndone section floats but didn't implement."
+      },
+      {
+        "file": "Sources/Views/Detail/BranchRow.swift",
+        "line": 55,
+        "severity": "low",
+        "description": "The pills @ViewBuilder has nested conditionals that are readable but would benefit from extraction into a single `private func computePills() -> [PillSpec]` so the branch-status mapping is trivially unit-testable. Right now the snapshot tests cover it pixel-level but there's no structural test for 'branch with upstream + gone still shows gone pill and suppresses ahead/behind'. Not a bug in this commit — the 'gone' path correctly gets an early pill — but adds brittleness."
+      },
+      {
+        "file": "Sources/Views/Detail/BranchListView.swift",
+        "line": 56,
+        "severity": "low",
+        "description": "`.task(id: focus.repo.id) { ... }` uses `DiscoveredRepo.id` (a URL). Fine today, but if two symlinked paths to the same repo are ever focused back-to-back, `.task(id:)` won't re-fire and the branch list will stale. Known limitation carried from M2-repo-scan's DiscoveredRepo.id = URL; orchestrator's repo-list synthesis already flagged this. No action required here."
+      },
+      {
+        "file": "Tests/KiteTests/ViewModelTests/BranchListModelTests.swift",
+        "line": 62,
+        "severity": "low",
+        "description": "Every test instantiates a real `RepoFocus` via `RepoFocus(repo: fixture.repo)` which spins up a real FSWatcher on `.git/`. The watcher thread is shut down via `defer { focus.shutdown() }` — correct — but six fixture tests each arming and tearing down a separate FSWatcher adds ~500ms per test on FSEvents coalescing. Consider a test-only `RepoFocus` init variant that skips FSWatcher setup (or a protocol seam) to speed tests. Non-blocking; current total suite run is still 42s."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "BranchListModel is the first @Observable @MainActor ViewModel in the mission that talks directly to git through the new focus.queue abstraction. Pattern (own @Observable model, reload on task(id:) + onChange(lastChangeAt) + refreshable) is clean and should be the template for StatusHeaderModel (already followed), M4 LogModel/GraphModel, M7 DiffModel.",
+      "evidence": "Sources/ViewModels/BranchListModel.swift + Sources/Views/Detail/BranchListView.swift"
+    },
+    {
+      "area": "testing",
+      "observation": "Snapshot tests correctly use NSHostingController.view.appearance = .darkAqua (not .preferredColorScheme(.dark)). Handoff discoveredIssue #2 elevates this from 'nice to have' to 'established pattern' — the M2 RepoSidebar snapshots are byte-identical across dark/light precisely because they missed this. Codify in AGENTS.md (already in Established patterns as of foundation post-scrutiny, but the M2 tests predate that codification).",
+      "evidence": "Tests/KiteTests/ViewTests/BranchListSnapshotTests.swift lines 199-226"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-BRANCH-001", "VAL-BRANCH-002", "VAL-BRANCH-003", "VAL-BRANCH-004"],
+    "unverified": []
+  }
+}

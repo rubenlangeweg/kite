@@ -44,3 +44,17 @@
 {"event":"fix_features_queued","items":["M8-fix-snapshot-degeneracy (settings-roots + dark-mode references byte-identical)"],"timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_user_testing_deferred","milestone":"repo-list","reason":"XCUITest TCC blocked on this host; VAL-REPO-007/008/UI-010 end-to-end evidence deferred to post-TCC re-run","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_complete","milestone":"repo-list","testsGreen":107,"commits":3,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_start","milestone":"branch-list","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M3-repo-focus-lifecycle","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M3-repo-focus-lifecycle","status":"completed","commit":"54911c3","testsAdded":11,"totalTestsGreen":110,"notableIssue":"actor_reentrancy_across_await_required_CompletionGate_pattern","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M3-branch-list","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M3-branch-list","status":"completed","commit":"1f90eb2","testsAdded":11,"totalTestsGreen":130,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M3-status-header","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M3-status-header","status":"completed","commit":"225a5a9","testsAdded":12,"totalTestsGreen":142,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_features_complete","milestone":"branch-list","featuresCompleted":3,"totalTestsGreen":142,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"scrutiny_start","milestone":"branch-list","round":1,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"scrutiny_complete","milestone":"branch-list","round":1,"status":"pass-with-non-blocking-issues","blockingIssues":0,"nonBlockingIssues":10,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"AGENTS.md","description":"Added 3 patterns: stateful-outer+pure-inner split, actor reentrancy remedy, @unchecked Sendable justification rule","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"INTERFACES.md","description":"Added per-focus observer fan-out discipline (consolidate to RepoDetailModel before 4th observer)","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"skills/git-engine-worker/SKILL.md","description":"Added Subprocess discipline section: minimize count per refresh, concurrent fan-out, 64KB Git.run boundary","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_complete","milestone":"branch-list","testsGreen":142,"commits":4,"timestamp":"2026-04-19T00:00:00Z"}

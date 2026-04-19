@@ -98,6 +98,11 @@ Features likely to use this worker: M1-git-engine, M1-git-parsers, M1-fs-watcher
 }
 ```
 
+## Subprocess discipline
+
+- **Minimize subprocess count per UI update.** Each `Process` launch costs ~15–30ms of spawn overhead even for trivial commands. A ViewModel that runs 3 sequential git commands to refresh one panel (e.g. branch list + upstream + HEAD detect) is slower than one that runs 1–2. When a future panel needs N git queries per refresh: (a) prefer a single richer command where possible (e.g. `git branch --list --format=...` already encodes upstream + ahead/behind), (b) fan out concurrently via `async let` or `withThrowingTaskGroup`, serialized through `focus.queue` at the outer boundary (not per-child), (c) cache outputs across same-tick reloads if a second observer runs against the same repo state.
+- **No `Git.run` for >64KB expected outputs.** Use `Git.stream` or the post-M1-fix-git-run-drain refactor. `git diff`, `git show`, `git log --patch`, `git archive` all routinely breach 64KB.
+
 ## When to return to orchestrator
 
 - A library documented a flag that doesn't exist on the user's git version (`/usr/bin/git --version` < 2.40).

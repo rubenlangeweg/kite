@@ -1,0 +1,57 @@
+{
+  "milestoneId": "M3-branch-list",
+  "featureId": "M3-repo-focus-lifecycle",
+  "commit": "54911c3",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "GitQueue + RepoFocus + RepoStore trio is well-designed and tightly scoped. The worker correctly identified that a trivial `actor { func run() { try await body() } }` does NOT serialize across suspension points (Swift actors are reentrant on every await) and implemented an explicit CompletionGate chain that preserves FIFO mail order even for long-running bodies — the correct fix for VAL-NET-009. RepoFocus creates a fresh FSWatcher per work-tree repo, skips bare repos cleanly, logs (rather than silently swallows) FSWatcher.start() failures, and is idempotent across deinit + explicit shutdown(). RepoStore correctly tears down the prior focus on main before releasing the reference (so cleanup doesn't fall off of ARC onto an arbitrary thread). All three types respect file ownership. No off-limits git flags, no process spawning outside Git.run. 11 new unit tests + 1 RepoSidebarModel extension, all green.",
+    "issues": [
+      {
+        "file": "Sources/Repo/GitQueue.swift",
+        "line": 68,
+        "severity": "medium",
+        "description": "CompletionGate is annotated `@unchecked Sendable` with no doc-comment justification (same pattern FSWatcher was flagged on in foundation round 1). The reasoning is defensible — NSLock-guarded fired+waiter pair — but a one-line comment explaining why Sendable is safe will save the next reviewer a re-litigation. Add: `// Safe: NSLock serializes all reads/writes of `fired`/`waiter`; the only non-Sendable type (CheckedContinuation) is single-writer/single-reader.`"
+      },
+      {
+        "file": "Sources/Repo/GitQueue.swift",
+        "line": 60,
+        "severity": "low",
+        "description": "The defer { myGate.fire() } fires the gate even if the caller's Task is cancelled before `body` starts — correct for chain liveness, but if a caller is cancelled while still awaiting priorGate.wait() (i.e. before it has installed its own gate on line 52), the chain drops that caller's no-op slot silently because `latestGate = myGate` already ran before the wait. Not a bug (the gate chain survives) but a subtle edge worth a test: cancel a mid-wait caller and verify subsequent callers still progress. Consider adding `cancelPropagatesBeforeBodyStart` as a 4th GitQueueTests case before M5 which will exercise this path under real fetch cancellation."
+      },
+      {
+        "file": "Sources/Repo/RepoFocus.swift",
+        "line": 46,
+        "severity": "low",
+        "description": "`rootTask: Task<Void, Never>?` is declared, cancelled on shutdown/deinit, but never assigned anywhere — the handoff flags this as 'infrastructure' for M5 auto-fetch/sidecar streams. If M5 doesn't land within the next milestone, remove it for now: dead code accumulates mental load. Alternately, promote it to a `sidecar: Task<Void, Never>?` + public setter so the intent is explicit."
+      },
+      {
+        "file": "Sources/Repo/RepoFocus.swift",
+        "line": 40,
+        "severity": "low",
+        "description": "`lastChangeAt: Date` uses Date (wall clock) for the observation seed. SwiftUI's `onChange(of:)` compares by equality and Date equality is exact to the nanosecond, so this works — but if two FSEvents fires land in the same clock microsecond (highly unlikely, but not impossible on fast filesystems), the second bump would be a no-op. Consider a monotonic tick (UInt64 counter incremented per fire) for robustness. Non-blocking; M3-branch-list's handoff already acknowledged it."
+      },
+      {
+        "file": "Sources/ViewModels/RepoSidebarModel.swift",
+        "line": 94,
+        "severity": "low",
+        "description": "The worker kept `persistence.setLastOpenedRepo(repo?.url.path)` here AND added the forward to `repoStore?.focus(on:)` which ALSO writes the same key. Two writes per selection is harmless (UserDefaults is idempotent) but the double-write is worth a comment or a consolidation. The handoff explicitly justifies keeping both for nil-repoStore configurations (legacy tests); acceptable as-is, just document it inline so the next reader doesn't think one was forgotten."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "GitQueue's CompletionGate pattern is a reusable primitive — worth documenting in AGENTS.md or skills/git-engine-worker/SKILL.md so future per-repo actors don't reinvent it. M5-fetch/pull/push will all route through `focus.queue.run { ... }` and should get the same guarantees.",
+      "evidence": "Sources/Repo/GitQueue.swift lines 3-63"
+    },
+    {
+      "area": "lifecycle",
+      "observation": "The 'explicit shutdown on main-actor before releasing, deinit as backstop' pattern for @MainActor @Observable types with non-trivial teardown is clean and worth codifying. M4 graph view models that own log-parsing tasks will need the same shape.",
+      "evidence": "Sources/Repo/RepoFocus.swift lines 78-99, Sources/ViewModels/RepoStore.swift lines 36-47"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-NET-009", "VAL-NET-010"],
+    "unverified": []
+  }
+}
