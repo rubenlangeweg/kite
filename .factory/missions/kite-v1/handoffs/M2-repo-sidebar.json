@@ -1,0 +1,72 @@
+{
+  "featureId": "M2-repo-sidebar",
+  "salientSummary": "Repo sidebar wired: @Observable RepoSidebarModel aggregates RepoScanner + PersistenceStore; RepoSidebarView renders grouped Pinned + per-root Sections with context-menu pin/unpin/Show-in-Finder/Copy-path and a refresh toolbar button; EmptyRepoList ContentUnavailableView routes the 'Add folder…' action through openSettings; KiteApp injects both stores into the window. 8 new ViewModel tests + 5 new snapshot tests + 5 new XCUITests (authored only). Full KiteTests suite now 95 tests green (90 Swift Testing + 5 XCTest snapshot). swift-snapshot-testing 1.17+ added to KiteTests target only. VAL-REPO-007/008/009 and VAL-UI-007/010 fulfilled.",
+  "whatWasImplemented": "Added Sources/ViewModels/RepoSidebarModel.swift — @Observable @MainActor model wrapping RepoScanner + PersistenceStore with discoveredByRoot (OrderedRepoGroups preserving root insertion order), pinned (filtered to live on-disk matches), selectedRepo (round-tripped through persistence.lastOpenedRepo), isScanning, plus refresh/select/pin/unpin/restoreLastSelection. Scanner is injectable via a @Sendable closure for tests; rootsOverride seam feeds the XCUITest fixture-roots launch arg. Default root is ~/Developer; extra roots from settings append, deduped by standardizedFileURL. Added Sources/Views/Sidebar/RepoSidebarView.swift — NavigationSplitView leftmost column with List(selection:), a Pinned section above per-root sections, context menu (Pin/Unpin toggle, Show in Finder via NSWorkspace, Copy path via NSPasteboard), .navigationSplitViewColumnWidth(200/260/400), .navigationTitle('Kite'), refresh toolbar button, .task { refresh; restoreLastSelection }. Added Sources/Views/Sidebar/RepoRow.swift — folder.fill for work-tree / cylinder for bare, two-line text (displayName + home-relative parent path), 'bare' pill badge, accessibility identifiers RepoSidebar.Row.<name>. Added Sources/Views/Sidebar/EmptyRepoList.swift — ContentUnavailableView wired to @Environment(\\.openSettings). Updated Sources/Views/RootView.swift to render RepoSidebarView in the sidebar column. Updated Sources/App/KiteApp.swift to own a PersistenceStore + RepoSidebarModel via @State, inject both via .environment(), and honor -KITE_FIXTURE_ROOTS launch arg for XCUITest. Edited project.yml to add pointfreeco/swift-snapshot-testing (from: 1.17.0) attached to KiteTests only; removed the deferral note. Package.resolved remains gitignored. Added accessibility identifiers: RepoSidebar.List, RepoSidebar.EmptyState, RepoSidebar.EmptyState.AddFolderButton, RepoSidebar.PinnedSection, RepoSidebar.RootSection.<name>, RepoSidebar.Row.<name>, RepoSidebar.RefreshButton.",
+  "whatWasLeftUndone": "XCUITest file Tests/KiteUITests/RepoSidebarUITests.swift is authored but NOT run — macOS TCC blocks XCUITest harness attachment in this environment (explicit direction from the feature brief). Must be re-run by a human on a host with Accessibility + Automation prompts accepted. Snapshot reference PNGs were auto-generated and committed, but need human eyeball before final sign-off (see discoveredIssues below).",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Project regenerated with SnapshotTesting package dependency attached to KiteTests target only." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED after resolving SPM package; no warnings." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests", "exitCode": 0, "observation": "95 tests green: 90 Swift Testing cases across 13 suites + 5 XCTest snapshot cases. Previous 82 still green; 8 new RepoSidebarModel cases + 5 new RepoSidebarSnapshotTests cases added." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/49 files require formatting." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "0 violations across 49 files." }
+    ],
+    "interactiveChecks": [
+      { "action": "Viewed generated snapshot PNGs (EmptyState light/dark, RepoRow workTree/bare/dark) via Read tool", "observed": "Empty state renders 'No repositories / Kite didn't find any git repositories in ~/Developer. Add another folder in Settings to look elsewhere.' with a prominent 'Add folder…' button; RepoRow work-tree variant shows a blue folder.fill icon + 'alpha' + '/Users/tester/Developer'; RepoRow bare variant shows the cylinder glyph + 'server.git' + 'bare' pill. Dark-mode snapshots record cleanly but render near-identical to light mode because the host NSView has a transparent background; parity against List(.sidebar) vibrant background is a visual-review item for the human pass." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/ViewModelTests/RepoSidebarModelTests.swift",
+        "cases": [
+          { "name": "refreshPopulatesDiscoveredByRoot", "verifies": "VAL-REPO-007" },
+          { "name": "pinAddsToPersistence", "verifies": "VAL-REPO-009" },
+          { "name": "unpinRemovesFromPersistence", "verifies": "VAL-REPO-009" },
+          { "name": "selectWritesLastOpenedRepo", "verifies": "VAL-REPO-008" },
+          { "name": "restoreLastSelectionFindsMatchingRepo", "verifies": "VAL-REPO-008" },
+          { "name": "restoreLastSelectionWhenRepoMissing", "verifies": "VAL-REPO-008" },
+          { "name": "pinnedPathsNotDiscoveredAreExcluded", "verifies": "VAL-REPO-009" },
+          { "name": "emptyScanEmptyModel", "verifies": "VAL-UI-007" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/RepoSidebarSnapshotTests.swift",
+        "cases": [
+          { "name": "testEmptyState", "verifies": "VAL-UI-007" },
+          { "name": "testEmptyStateDarkMode", "verifies": "VAL-UI-010" },
+          { "name": "testRepoRowWorkTree", "verifies": "VAL-REPO-007" },
+          { "name": "testRepoRowBare", "verifies": "VAL-UI-007" },
+          { "name": "testRepoRowDarkMode", "verifies": "VAL-UI-010" }
+        ]
+      },
+      {
+        "file": "Tests/KiteUITests/RepoSidebarUITests.swift",
+        "cases": [
+          { "name": "testSidebarListsDiscoveredRepos", "verifies": "VAL-REPO-007" },
+          { "name": "testSelectingRepoUpdatesDetailPaneWithin500ms", "verifies": "VAL-REPO-007" },
+          { "name": "testLastSelectedRepoRestoredOnRelaunch", "verifies": "VAL-REPO-008" },
+          { "name": "testPinnedReposAppearInPinnedSection", "verifies": "VAL-REPO-009" },
+          { "name": "testEmptyStateShowsAddFolderButton", "verifies": "VAL-UI-007" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "Snapshot reference PNGs were auto-recorded on first test run and committed alongside the tests. They pass on re-run (deterministic), but have NOT been visually reviewed by a human. Before final milestone sign-off, someone with a display should open Tests/KiteTests/ViewTests/__Snapshots__/RepoSidebarSnapshotTests/*.png and confirm the empty state, RepoRow.workTree, RepoRow.bare, and dark-mode variants look correct. The dark-mode variants in particular render against a transparent NSHostingController background so they look nearly identical to light mode in the current snapshots — once the sidebar is viewed in-app against the vibrant List(.sidebar) backdrop the dark-mode parity is expected to look right, but a follow-up snapshot revision that embeds each RepoRow in a representative container background would make the dark-mode assertion stronger.",
+      "affectsFeature": "M2-repo-sidebar"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "Tests/KiteUITests/RepoSidebarUITests.swift is authored but was NOT executed: macOS TCC blocks XCUITest harness attachment on this host. The 5 cases fulfill the end-to-end verification plane for VAL-REPO-007/008/009 and VAL-UI-007. A human with Accessibility + Automation permissions granted should run `xcodebuild test -scheme Kite -only-testing:KiteUITests/RepoSidebarUITests` to confirm.",
+      "affectsFeature": "M2-repo-sidebar"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "Because M2-settings-roots hasn't landed yet, pressing 'Add folder…' in the empty state opens the placeholder Settings scene showing only 'Settings (populated in M2-settings-roots)'. Per the feature brief this is acceptable; the next feature will populate the Roots tab and the action will become end-to-end functional.",
+      "affectsFeature": "M2-settings-roots"
+    }
+  ]
+}

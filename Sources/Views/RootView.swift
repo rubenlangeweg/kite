@@ -1,17 +1,11 @@
 import SwiftUI
 
 struct RootView: View {
-    @State private var sidebarSelection: String?
     @State private var contentSelection: String?
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $sidebarSelection) {
-                Text("Repos")
-                    .foregroundStyle(.secondary)
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 320)
-            .accessibilityIdentifier("kite.sidebar")
+            RepoSidebarView()
         } content: {
             List(selection: $contentSelection) {
                 Text("Branches and graph")
@@ -26,10 +20,5 @@ struct RootView: View {
                 .accessibilityIdentifier("kite.detail")
         }
         .navigationSplitViewStyle(.balanced)
-        .navigationTitle("Kite")
     }
-}
-
-#Preview {
-    RootView()
 }

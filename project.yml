@@ -8,6 +8,11 @@ options:
   defaultConfig: Debug
   xcodeVersion: "16.0"
 
+packages:
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    from: 1.17.0
+
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -58,6 +63,8 @@ targets:
       - path: Tests/KiteTests
     dependencies:
       - target: Kite
+      - package: SnapshotTesting
+        product: SnapshotTesting
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: nl.rb2.kite.tests
@@ -78,8 +85,3 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: nl.rb2.kite.uitests
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: Kite
-
-# NOTE: pointfreeco/swift-snapshot-testing is intentionally NOT added here.
-# It will be attached to KiteTests (or a dedicated ViewTests target) by the
-# first feature that actually uses snapshot tests (see M2-repo-sidebar and
-# later). Deferring avoids a Package.resolved commit that isn't used yet.
