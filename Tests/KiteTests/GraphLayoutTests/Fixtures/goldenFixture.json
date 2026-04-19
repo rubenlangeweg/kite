@@ -1,0 +1,581 @@
+[
+  {
+    "column" : 0,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T22:13:20Z",
+      "parents" : [
+        "F",
+        "E"
+      ],
+      "sha" : "M",
+      "subject" : "merge feature back into main"
+    },
+    "inEdges" : [
+      {
+        "color" : 2,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 1,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 0,
+        "toColumn" : 1
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 0,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T21:13:20Z",
+      "parents" : [
+        "D"
+      ],
+      "sha" : "F",
+      "subject" : "main: tidy"
+    },
+    "inEdges" : [
+      {
+        "color" : 1,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 2,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T20:13:20Z",
+      "parents" : [
+        "F",
+        "D",
+        "C"
+      ],
+      "sha" : "O",
+      "subject" : "octopus subtree merge"
+    },
+    "inEdges" : [
+      {
+        "color" : 0,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 3,
+        "fromColumn" : 2,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 2,
+        "toColumn" : 3
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 4,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T19:13:20Z",
+      "parents" : [
+        "Y"
+      ],
+      "sha" : "X",
+      "subject" : "orphan: rename module"
+    },
+    "inEdges" : [
+      {
+        "color" : 5,
+        "fromColumn" : 4,
+        "toColumn" : 4
+      },
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 0,
+        "fromColumn" : 4,
+        "toColumn" : 4
+      },
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 4,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T18:13:20Z",
+      "parents" : [
+        "Z"
+      ],
+      "sha" : "Y",
+      "subject" : "orphan: split helpers"
+    },
+    "inEdges" : [
+      {
+        "color" : 0,
+        "fromColumn" : 4,
+        "toColumn" : 4
+      },
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 4,
+        "toColumn" : 4
+      },
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 4,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T17:13:20Z",
+      "parents" : [
+
+      ],
+      "sha" : "Z",
+      "subject" : "orphan root"
+    },
+    "inEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 4,
+        "toColumn" : 4
+      },
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 1,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T16:13:20Z",
+      "parents" : [
+        "D",
+        "C"
+      ],
+      "sha" : "E",
+      "subject" : "merge feature-x into main"
+    },
+    "inEdges" : [
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 1
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 1,
+        "toColumn" : 0
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 1,
+        "toColumn" : 3
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 0,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T15:13:20Z",
+      "parents" : [
+        "B"
+      ],
+      "sha" : "D",
+      "subject" : "main: bump version"
+    },
+    "inEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      },
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 3,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T14:13:20Z",
+      "parents" : [
+        "B"
+      ],
+      "sha" : "C",
+      "subject" : "feature-x: wire provider"
+    },
+    "inEdges" : [
+      {
+        "color" : 4,
+        "fromColumn" : 3,
+        "toColumn" : 3
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 3,
+        "toColumn" : 0
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 0,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T13:13:20Z",
+      "parents" : [
+        "A"
+      ],
+      "sha" : "B",
+      "subject" : "main: add README"
+    },
+    "inEdges" : [
+      {
+        "color" : 3,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 0,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 0,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T12:13:20Z",
+      "parents" : [
+
+      ],
+      "sha" : "A",
+      "subject" : "main root"
+    },
+    "inEdges" : [
+      {
+        "color" : 0,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "refs" : [
+
+    ]
+  },
+  {
+    "column" : 0,
+    "commit" : {
+      "authorEmail" : "fixture@kite.local",
+      "authorName" : "Fixture",
+      "authoredAt" : "2023-11-14T11:13:20Z",
+      "parents" : [
+
+      ],
+      "sha" : "P",
+      "subject" : "unrelated root"
+    },
+    "inEdges" : [
+      {
+        "color" : 1,
+        "fromColumn" : 0,
+        "toColumn" : 0
+      },
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "outEdges" : [
+      {
+        "color" : 1,
+        "fromColumn" : 2,
+        "toColumn" : 2
+      }
+    ],
+    "refs" : [
+
+    ]
+  }
+]

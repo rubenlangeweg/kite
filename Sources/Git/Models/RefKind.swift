@@ -5,7 +5,7 @@ import Foundation
 ///
 /// Symbolic `HEAD` pseudo-refs (e.g. `refs/remotes/origin/HEAD`) are NOT
 /// represented — the parser filters them out.
-enum RefKind: Equatable {
+enum RefKind: Equatable, Codable {
     case localBranch(String)
     case remoteBranch(remote: String, branch: String)
     case tag(String)

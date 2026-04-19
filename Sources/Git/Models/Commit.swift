@@ -5,7 +5,7 @@ import Foundation
 /// `parents` preserves the parent-SHA array in order (first parent first) so
 /// the graph layout can apply first-parent preference. Merge commits have
 /// `parents.count >= 2`; octopus merges `>= 3`. Root commits have `parents == []`.
-struct Commit: Equatable {
+struct Commit: Equatable, Codable {
     let sha: String
     let parents: [String]
     let authorName: String
