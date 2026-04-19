@@ -1,0 +1,198 @@
+{
+  "milestone": "graph",
+  "round": 1,
+  "status": "pass-with-non-blocking-issues",
+  "validatorsRun": {
+    "xcodegen": {
+      "exitCode": 0,
+      "observation": "xcodegen generate: project regenerated cleanly (Kite.xcodeproj rewritten)."
+    },
+    "build": {
+      "exitCode": 0,
+      "observation": "xcodebuild -scheme Kite -configuration Debug build: ** BUILD SUCCEEDED ** with only the pre-existing Sendable warnings in RepoSidebarModel.swift (carried over from repo-list, unrelated to M4)."
+    },
+    "test": {
+      "exitCode": 0,
+      "observation": "xcodebuild test -scheme Kite -destination 'platform=macOS' -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests: 164 tests in 24 suites passed in 56.7s. New for M4: GraphLayout (12) + LanePalette shared in that suite + GraphRowRefs (7) + GraphCellUnit (3) + GraphRowContentUnit (9) + GraphModel (10) + GraphCellSnapshot (8 XCTest) + GraphRowContentSnapshot (8 XCTest) + GraphViewSnapshot (5 XCTest). KiteUITests NOT run (TCC blocker)."
+    },
+    "swiftformat": {
+      "exitCode": 0,
+      "observation": "swiftformat Sources Tests --lint: 0/97 files require formatting."
+    },
+    "swiftlint": {
+      "exitCode": 0,
+      "observation": "swiftlint --strict: 0 violations, 0 serious in 97 files."
+    },
+    "snapshotMd5Audit": {
+      "exitCode": 0,
+      "observation": "M4 snapshot suites are all internally md5-distinct: GraphCellSnapshotTests 8/8, GraphRowContentSnapshotTests 8/8, GraphViewSnapshotTests 5/5. Dark counterparts differ from light (MergeInbound-dark ebb53c95 vs light 9d35fea0, ShallowBanner-dark 72f663a2 vs light c15bc11f, CommitLimitFooter-dark b01e27f5 vs light 2421d939, GraphRowContent-dark fe27419e). Pre-existing dupes in RepoSidebarSnapshotTests (47fe1945×2, b519ca7d×2) and SettingsRootsTabSnapshotTests (d10d012d×4) REMAIN, both on the skip-list and owned by M8-fix-snapshot-degeneracy — NOT regressed by M4."
+    }
+  },
+  "reviewsSummary": {
+    "total": 4,
+    "passed": 0,
+    "passedWithNonBlocking": 4,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "M4-graph-layout",
+      "file": "Sources/Git/Layout/GraphLayout.swift",
+      "line": 60,
+      "description": "consumeConvergingLanes always inserts the commit's own column at the head of returned list and therefore always emits a self-column in-edge. Intentional (it draws the top-stub into the dot) but the variable name reads as if that column is 'converging'. Rename to incomingColumns + one-line comment distinguishing dot-entry stub from true converging lanes."
+    },
+    {
+      "featureId": "M4-graph-layout",
+      "file": "Sources/Git/Layout/LanePalette.swift",
+      "line": 46,
+      "description": "Force-unwrap on `LaneColor(rawValue: Int(slot))!`; invariant holds but `LaneColor.allCases[Int(slot)]` is equally cheap and safer if cases are ever marked non-contiguous."
+    },
+    {
+      "featureId": "M4-graph-row-view",
+      "file": "Sources/Views/Graph/GraphCell.swift",
+      "line": 9,
+      "description": "Typo in doc-comment: \"Establshed\" → \"Established\"."
+    },
+    {
+      "featureId": "M4-graph-row-view",
+      "file": "Sources/Views/Graph/GraphCell.swift",
+      "line": 119,
+      "description": "Dot fallback uses LanePalette.color(for: commit.sha) for leaf rows (no out-edges) — SHA-seeded rather than branch-seeded. Leaf dots can visually clash with their descendants' branch color. Tracks the M4-graph-layout handoff's \"branch-name-driven coloring\" deferred follow-up."
+    },
+    {
+      "featureId": "M4-graph-row-meta",
+      "file": "Sources/Git/Layout/GraphRowRefs.swift",
+      "line": 1,
+      "description": "Ownership crossover: file lives in Sources/Git/Layout/ (git-engine-worker territory per INTERFACES.md §3) but was written by the swiftui-worker per the feature brief. Reclassify in INTERFACES.md or move under a cross-archetype subfolder."
+    },
+    {
+      "featureId": "M4-graph-row-meta",
+      "file": "Sources/Views/Graph/GraphRowContent.swift",
+      "line": 67,
+      "description": "Per-row TimelineView(.periodic ... by: 60) — 200 rows = 200 scheduled re-renders/min. Pushing to an app-level minute broadcaster scales better when M7 diff pane adds more TimelineView consumers."
+    },
+    {
+      "featureId": "M4-graph-scroll-container",
+      "file": "Sources/Views/Graph/GraphView.swift",
+      "line": 51,
+      "description": "onChange(of: focus.lastChangeAt) spawns an unstructured Task per tick; activeReload cancels the INNER reload but the outer Task is not tracked. Same pattern flagged for BranchListView + StatusHeaderView in branch-list scrutiny. This is the 3rd per-focus observer; INTERFACES.md §4 says consolidate before the 4th. STRONGLY recommend a RepoDetailModel consolidation before M7-commit-diff lands."
+    },
+    {
+      "featureId": "M4-graph-scroll-container",
+      "file": "Sources/ViewModels/GraphModel.swift",
+      "line": 196,
+      "description": "Git.run reads `git log --all --topo-order -n 200 -z` output via readToEnd() — ~38 KB typical, could push past ~64 KB pipe-buffer boundary with pathological long subjects. Foundation scrutiny queued this as M1-fix-git-run-drain (pre-M7). Recommend prioritizing that fix ahead of M5 so graph reload can't block on extreme repos."
+    },
+    {
+      "featureId": "M4-graph-scroll-container",
+      "file": "Sources/ViewModels/GraphModel.swift",
+      "line": 140,
+      "description": "Transient reload failure wipes `rows = []`, emptying the List. Consider preserving prior rows + surfacing a banner so a brief flake doesn't cause a full view blank-out."
+    },
+    {
+      "featureId": "M4-graph-scroll-container",
+      "file": "Sources/ViewModels/GraphModel.swift",
+      "line": 224,
+      "description": "Empty-repo detection relies on stderr substring matching of English git messages. Documented assumption: Process env sets LC_ALL=C (AGENTS.md §4). Worth an inline comment at the matcher so a future localization reviewer doesn't try to internationalize it."
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "file": "INTERFACES.md",
+      "change": "Upgrade §4 Shared state rules → Per-focus observer fan-out from 'before adding a 4th, consolidate' to 'before M5-fetch ships, consolidate'. M4 is the 3rd observer; by the time M7's two diff models land we're at 5 unstructured per-tick Tasks and the cost of the late refactor compounds. Propose: an @Observable RepoDetailModel on RepoFocus that exposes branchList + statusHeader + graph + uncommittedDiff + commitDiff as child @Observable fields, with a single `reloadAll(tick:)` method called from the RepoFocus-level task handle. Move the .onChange(of: focus.lastChangeAt) site from three views into one.",
+      "rationale": "M4 landed without consolidating. M5 net-ops will trigger fetch→reload cycles that hit all three observers simultaneously, amplifying the reload-storm effect. The refactor gets cheaper the sooner it lands."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Under Known gotchas → Git CLI, hoist the Git.run 64KB note: 'M4-graph-scroll-container is the first real consumer reading >10KB from Git.run (log of 200 commits, ~38KB typical). This is still under the ~64KB pipe-buffer boundary, but narrowing the margin. Any new large-output caller (M7 diff pane is the next one) MUST switch to Git.stream or the M1-fix-git-run-drain refactor must ship first. Reviewers: check for a new `Git.run([\"log\", ...])` OR `Git.run([\"diff\", ...])` OR `Git.run([\"show\", ...])` in any PR and flag.'",
+      "rationale": "The foundation scrutiny flagged this as pre-M7; M4 narrowed the margin. The guidance needs to stay visible as new callers appear."
+    },
+    {
+      "file": "INTERFACES.md",
+      "change": "Under §3 File ownership, add a note: 'Sources/Git/Layout/ houses both the pure GraphLayout algorithm (git-engine-worker) AND the post-layout GraphRowRefs.enrich adapter (swiftui-worker). Either is acceptable; future workers touching Layout/ should check the per-file doc-comment for the originating feature before assuming archetype.'",
+      "rationale": "M4-graph-row-meta's handoff flagged the crossover; codify rather than leave it as a per-worker surprise."
+    },
+    {
+      "file": "skills/swiftui-worker/SKILL.md",
+      "change": "Add a note on reload-error state handling: 'A view model that fails a reload after a prior successful reload should prefer preserving the previous rendered state + surfacing a banner, not wiping state to empty. GraphModel's current behaviour (sets rows=[] on error) is the opposite — causes a full blank-out on transient flakes.'",
+      "rationale": "M5 net-ops and M7 diff will both have transient network / disk failures that should not blank the UI."
+    },
+    {
+      "file": "skills/git-engine-worker/SKILL.md",
+      "change": "Codify the 'fan-out inside queue boundary' subprocess discipline demonstrated by GraphModel.performReload: `await focus.queue.run { async let a = Git.run(...); async let b = Git.run(...); ...; return try await (a, b, ...) }`. The queue boundary is outer — guaranteeing per-repo serial access across ops. The fan-out is inner — 4 subprocess spawns happen concurrently under the same queue turn. This is the correct pattern when a model needs multiple reads from the same focused repo.",
+      "rationale": "BranchListModel (M3) does 3 sequential focus.queue.run calls for its detached-HEAD probe — same antipattern M4 flagged. GraphModel demonstrates the fix; codify so M5/M7 reach for the correct pattern first."
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilledThisMilestone": [
+      "VAL-GRAPH-001",
+      "VAL-GRAPH-002",
+      "VAL-GRAPH-003",
+      "VAL-GRAPH-004",
+      "VAL-GRAPH-005",
+      "VAL-GRAPH-006",
+      "VAL-GRAPH-007",
+      "VAL-GRAPH-009",
+      "VAL-GRAPH-010",
+      "VAL-GRAPH-011"
+    ],
+    "anyOrphansOrFailures": [
+      {
+        "assertion": "VAL-GRAPH-008",
+        "status": "deferred",
+        "note": "60fps scroll performance is architecturally plausible (per-row Canvas, bounded segment count, virtualized List) but can only be verified via Instruments Core Animation capture on a real display. No unit / snapshot test covers it. Defer to user-testing-validator-graph on a TCC-unblocked host with Instruments."
+      },
+      {
+        "assertion": "VAL-GRAPH-009",
+        "status": "partial",
+        "note": "selectedSHA selection state is tested (selectUpdatesState, clearEmptiesState, XCUITest testCommitTapSetsSelection authored). The 'opens diff viewer' half of the assertion requires M7-commit-diff — correctly scoped forward per features.json."
+      },
+      {
+        "assertion": "VAL-GRAPH-010",
+        "status": "partial",
+        "note": "Stable Identifiable.id (LayoutRow.id == commit.sha) provides the scroll-preservation mechanism via SwiftUI's List diffing. The authored XCUITest testGraphRendersAfterFocus covers render-after-focus but not the scroll-position invariant across FSEvents refresh. Evidence gap closes on a TCC host running a FSEvents-synthesis test (fixture commit-while-scrolled)."
+      }
+    ]
+  },
+  "carryOverObservations": [
+    {
+      "area": "foundation round 1 carry-overs",
+      "status": "unchanged",
+      "note": "Git.run 64KB pipe-buffer (M4 narrowed the margin to ~38KB; still under), Git.run cancel race, GitError.remoteRejected missing (M5 blocker), DiffParser quoted-path (M7), ProgressParser consume-all (M5), FSWatcher.start post-stop no-op, FSWatcher @unchecked-Sendable rationale missing, PersistenceStore silent swallows, setWindowFrame debounce, LogParser if-expr 5.10 dependency, RefKind.head case — M4 actually PRODUCES .head now via GraphRowRefs.prependHeadIfCurrent, resolving the foundation-era 'dead case' finding. Other items unchanged."
+    },
+    {
+      "area": "repo-list round 1 carry-overs",
+      "status": "unchanged",
+      "note": "SettingsRootsTab & RepoSidebar degenerate snapshots remain on the skip-list; M4's own snapshots do NOT fall into the degenerate trap. xcodegen auto-resources + RepoSidebarModel double-trigger + DiscoveredRepo.id = URL all unchanged."
+    },
+    {
+      "area": "branch-list round 1 carry-overs",
+      "status": "partially-mitigated",
+      "note": "BranchListModel.lastFSTick is now READ (line 48) — partially remedies the dead-field flag; StatusHeaderModel.lastFSTick likewise read. RepoFocus.rootTask remains declared-but-unused (cancellation path only, never assigned). GitQueue @unchecked Sendable CompletionGate still lacks a justification doc-comment. BranchListModel.probeDetachedHead still fires 3 sequential focus.queue.run calls. Fan-out pattern across observers NOT consolidated in M4 — scheduled for pre-M7 refactor."
+    },
+    {
+      "area": "new concerns introduced this milestone",
+      "status": "non-blocking",
+      "note": "(1) Ownership crossover (GraphRowRefs.swift in git-engine territory, written by swiftui-worker); (2) 3rd per-focus observer without consolidation — tension with INTERFACES.md §4 prescription; (3) transient error wipes rows list; (4) Git.run log output approaches pipe-buffer boundary."
+    }
+  ],
+  "deferredUserTestingFollowUps": [
+    "Run Tests/KiteUITests/GraphUITests.swift (4 cases: rendersAfterFocus, commitTapSetsSelection, shallowBannerAppears, commitLimitFooterAppears) on a TCC-unblocked host.",
+    "Capture Instruments Core Animation profile for a 200-commit repo scroll — verify ≥55fps (VAL-GRAPH-008).",
+    "Manually validate VAL-GRAPH-010 scroll-position preservation: open a ≥200-commit repo, scroll mid-list, run `git commit --allow-empty` externally, confirm scroll position is preserved after FSEvents refresh.",
+    "Visual review of octopus merge rendering against a real octopus-merge repo (e.g. Linux-kernel-ish subtree merges in a fixture)."
+  ],
+  "pretraversalM5Guidance": {
+    "blocksM5": false,
+    "requiredBeforeM5": [
+      "Queue M1-fix-git-error-push-cases (new GitError cases for push — .remoteRejected / .protectedBranch / .hookRejected). M5-pull-push needs these or it'll be surfaced via a generic error toast."
+    ],
+    "strongRecommendBeforeM7": [
+      "M1-fix-git-run-drain (refactor Git.run to drain pipes concurrently) — M7 diff pane WILL exceed 64KB on real commits. Close to blocking for M7 but not M5.",
+      "RepoDetailModel consolidation (per INTERFACES.md §4) — 3 observers today, 5 after M7. Every milestone's refactor cost grows."
+    ]
+  },
+  "previousRound": null
+}

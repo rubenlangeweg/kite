@@ -1,0 +1,44 @@
+{
+  "milestoneId": "M4-graph",
+  "featureId": "M4-graph-row-meta",
+  "status": "pass-with-non-blocking-issues",
+  "commit": "8d19fc4",
+  "codeReview": {
+    "summary": "GraphRowContent is the pure-inner composing GraphCell + pill cluster + subject (flex, tail-truncated) + 140pt author + 64pt TimelineView age. Pills filter tags, cap at 3 with +N overflow. RelativeAgeFormatter handles the documented breakpoints including future-date clamp to \"just now\". RefPill branches on RefKind: HEAD is outlined accent, localBranch is filled accent, remoteBranch is secondary gray, tag → EmptyView. GraphRowRefs.enrich is a pure function that (1) drops tag refs, (2) prepends a synthetic .head when currentBranch matches an existing .localBranch on that commit, (3) returns unchanged rows when refsBySHA is empty. 7 GraphRowRefs unit tests pin every branch (populate, skip-tags, prepend-head, no-match, detached, empty-map, field-preservation). 9 GraphRowContent unit tests pin every RelativeAgeFormatter breakpoint. 8 snapshot cases md5-distinct (single row / single local / local+remote / overflow +2 / HEAD pill trio / long-subject / selected background / dark-mode parity). Determinism achieved by stamping fixture commits at Date(timeIntervalSince1970: 0) so the TimelineView-driven age resolves to a stable bucket.",
+    "issues": [
+      {
+        "file": "Sources/Git/Layout/GraphRowRefs.swift",
+        "line": 1,
+        "severity": "non-blocking",
+        "description": "Ownership crossover: GraphRowRefs.swift lives in Sources/Git/Layout/ (git-engine-worker ownership per INTERFACES.md §3) but was written by the swiftui-worker responsible for M4-graph-row-meta. Handoff flagged this explicitly. The file is pure post-layout enrichment — sensible as a sibling to GraphLayout.swift. Either (a) formally reclassify Sources/Git/Layout/GraphRowRefs.swift as cross-archetype in INTERFACES.md, or (b) move to Sources/Git/Layout/Models/ if strict ownership matters. Non-blocking."
+      },
+      {
+        "file": "Sources/Views/Graph/GraphRowContent.swift",
+        "line": 67,
+        "severity": "non-blocking",
+        "description": "`TimelineView(.periodic(from: .now, by: 60))` re-renders a 64pt Text every minute per visible row. For 200 visible rows this is 200 re-renders/min — cheap but wasteful. An app-level TimelineView that broadcasts the current bucket through an @Observable or .environment(minuteTick) would scale better. Defer to M7 or later when diff pane adds more TimelineView consumers."
+      },
+      {
+        "file": "Sources/Views/Graph/GraphRowContent.swift",
+        "line": 89,
+        "severity": "non-blocking",
+        "description": "`ForEach(Array(pillsToShow.enumerated()), id: \\.offset)` uses offset as id — fine for a static 3-slot cap, but RefKind itself is Equatable & Hashable (verified by isTag pattern matching elsewhere) and using the ref itself as id would be cleaner and survive animations. Minor."
+      },
+      {
+        "file": "Sources/Views/Graph/RelativeAgeFormatter.swift",
+        "line": 22,
+        "severity": "non-blocking",
+        "description": "Integer division on seconds uses approximate month (30d) and year (365d) constants. Near a month/year boundary a commit can flip between bucket labels in a way a user might notice. Calendar-aware formatting is overkill for 64pt labels, but flag if users complain."
+      }
+    ]
+  },
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-GRAPH-001", "VAL-GRAPH-007"],
+    "unverified": []
+  },
+  "testsSpotChecked": [
+    { "name": "enrichPrependsHEADForCurrentBranch", "result": "pass", "observation": "`.head` lands first in refs — HEAD → main reading order." },
+    { "name": "testWithOverflow", "result": "pass", "observation": "md5 4f3cb465 distinct from single-local (037c2508) and local+remote (a1e0fd32)." },
+    { "name": "enrichSkipsTags", "result": "pass", "observation": "Belt-and-braces filter exists in both GraphRowRefs (pre-render) and GraphRowContent.visibleRefs (render-time)." }
+  ]
+}

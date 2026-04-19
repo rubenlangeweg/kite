@@ -1,0 +1,66 @@
+{
+  "featureId": "M4-graph-row-meta",
+  "salientSummary": "GraphRowContent composes graph column + pills + subject + author + live relative-age; RefPill renders local/remote/HEAD (tags filtered); GraphRowRefs.enrich joins ForEachRefParser output into [LayoutRow] with synthetic .head prepend when currentBranch matches. 8 md5-distinct snapshots + 16 unit tests green. VAL-GRAPH-001 and VAL-GRAPH-007 fulfilled.",
+  "whatWasImplemented": "Added Sources/Git/Layout/GraphRowRefs.swift (pure enrich function: filters tags, prepends .head for current branch, no-op on empty map). Added Sources/Views/Graph/RelativeAgeFormatter.swift (compact breakpoints: just now / Nm / Nh / Nd / Nw / Nmo / Ny, with future-date clamp to just now). Added Sources/Views/Graph/RefPill.swift (Capsule-based pill: accent-filled local, secondary-filled remote, outlined HEAD; tag renders as EmptyView). Added Sources/Views/Graph/GraphRowContent.swift (pure inner view composing GraphCell + pill cluster with +N overflow at 3 + subject flex/tail-truncate + 140pt author + 64pt TimelineView age label, plus selection background). Added Tests/KiteTests/GraphLayoutTests/GraphRowRefsTests.swift (7 @Test covering populate, skip-tags, head-prepend, no-head-on-mismatch, detached case, empty-map shortcut, field preservation). Added Tests/KiteTests/ViewTests/GraphRowContentUnitTests.swift (9 @Test covering every RelativeAgeFormatter breakpoint plus a tag-drop smoke test). Added Tests/KiteTests/ViewTests/GraphRowContentSnapshotTests.swift (8 snapshot cases: single row, single local pill, local+remote, overflow +2, HEAD pill trio, long-subject truncate, selected background, dark-mode parity of local+remote). Commits stamped at Date(timeIntervalSince1970: 0) so TimelineView-driven age labels are deterministic across runs. Snapshot refs recorded under Tests/KiteTests/ViewTests/__Snapshots__/GraphRowContentSnapshotTests/ — 8 PNGs all with distinct md5.",
+  "whatWasLeftUndone": "Wiring GraphRowContent into the scroll container (M4-graph-scroll-container) and calling GraphRowRefs.enrich with live ForEachRefParser output (also M4-graph-scroll-container). Tag pills are intentionally out of scope per mission §3.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "project regenerated with new sources and tests" },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests", "exitCode": 0, "observation": "Test run with 154 Swift Testing tests in 23 suites passed; XCTest block Executed 26 tests with 0 failures — total 180 (was 156 baseline, +24 from this feature)" },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/92 files require formatting" },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "0 violations in 92 files" },
+      { "command": "find __Snapshots__/GraphRowContentSnapshotTests -name '*.png' -exec md5 -r {} \\; | awk '{print $1}' | sort -u | wc -l", "exitCode": 0, "observation": "8 — every case md5-distinct, no degenerate false-greens" }
+    ],
+    "interactiveChecks": [
+      { "action": "Did not launch the app; the row is a pure inner view with no wired callsite yet (that's M4-graph-scroll-container). Snapshot + unit tests fully exercise the presentation. Manual fixture-repo check deferred to the scroll container feature when GraphRowContent has a real caller.", "observed": "N/A — pure view path fully covered by snapshot + unit suites" }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/GraphLayoutTests/GraphRowRefsTests.swift",
+        "cases": [
+          { "name": "enrichPopulatesLocalBranches", "verifies": "VAL-GRAPH-007" },
+          { "name": "enrichSkipsTags", "verifies": "VAL-GRAPH-007" },
+          { "name": "enrichPrependsHEADForCurrentBranch", "verifies": "VAL-GRAPH-007" },
+          { "name": "enrichDoesNotPrependHEADWhenNoMatch", "verifies": "VAL-GRAPH-007" },
+          { "name": "enrichDoesNotPrependHEADWhenDetached", "verifies": "VAL-GRAPH-007" },
+          { "name": "enrichReturnsRowsUnchangedWhenNoRefs", "verifies": "VAL-GRAPH-007" },
+          { "name": "enrichPreservesOtherFields", "verifies": "VAL-GRAPH-007" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/GraphRowContentUnitTests.swift",
+        "cases": [
+          { "name": "justNow", "verifies": "VAL-GRAPH-001" },
+          { "name": "minutes", "verifies": "VAL-GRAPH-001" },
+          { "name": "hours", "verifies": "VAL-GRAPH-001" },
+          { "name": "days", "verifies": "VAL-GRAPH-001" },
+          { "name": "weeks", "verifies": "VAL-GRAPH-001" },
+          { "name": "months", "verifies": "VAL-GRAPH-001" },
+          { "name": "years", "verifies": "VAL-GRAPH-001" },
+          { "name": "futureClamps", "verifies": "VAL-GRAPH-001" },
+          { "name": "tagsAreDropped", "verifies": "VAL-GRAPH-007" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/GraphRowContentSnapshotTests.swift",
+        "cases": [
+          { "name": "testSingleRow", "verifies": "VAL-GRAPH-001" },
+          { "name": "testWithSingleLocalBranch", "verifies": "VAL-GRAPH-007" },
+          { "name": "testWithLocalAndRemote", "verifies": "VAL-GRAPH-007" },
+          { "name": "testWithOverflow", "verifies": "VAL-GRAPH-007" },
+          { "name": "testHEADPill", "verifies": "VAL-GRAPH-007" },
+          { "name": "testLongSubjectTruncates", "verifies": "VAL-GRAPH-001" },
+          { "name": "testSelected", "verifies": "VAL-GRAPH-001" },
+          { "name": "testDarkMode", "verifies": "VAL-GRAPH-007" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    { "severity": "non-blocking", "description": "Ownership crossover: `Sources/Git/Layout/GraphRowRefs.swift` and `Tests/KiteTests/GraphLayoutTests/GraphRowRefsTests.swift` live in paths INTERFACES.md §3 assigns to git-engine-worker, but the feature brief for M4-graph-row-meta explicitly lists them under this swiftui-worker's ownership. Followed the feature brief. Future git-engine-worker touches to Sources/Git/Layout/ should be aware this file lives there.", "affectsFeature": "M4-graph-scroll-container" },
+    { "severity": "non-blocking", "description": "TimelineView(.periodic(from: .now, by: 60)) means age labels re-render each minute in production and at arbitrary instants in tests. Snapshot determinism is achieved by stamping fixture commits at Date(timeIntervalSince1970: 0) so every case resolves to a large-year bucket (5y+ from now, stable for decades). If the suite ever moves to hermetic clock injection, passing a fixed `now` to the TimelineView context would let the fixtures use fresher timestamps — not needed today.", "affectsFeature": null }
+  ]
+}

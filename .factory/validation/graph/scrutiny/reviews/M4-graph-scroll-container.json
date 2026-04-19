@@ -1,0 +1,51 @@
+{
+  "milestoneId": "M4-graph",
+  "featureId": "M4-graph-scroll-container",
+  "status": "pass-with-non-blocking-issues",
+  "commit": "a8560c5",
+  "codeReview": {
+    "summary": "GraphView + GraphViewContent implement the stateful-outer / pure-inner split. GraphModel is @Observable @MainActor with rows/isLoading/isShallowRepo/commitLimitHit/lastError/selectedSHA. reload() cancels the previous activeReload and spawns a new Task that wraps `Self.fetchGraphInputs` inside a single `focus.queue.run { ... }` block — the subprocess fan-out (4 async-let Git.run calls: log, refs, symbolic-ref HEAD, rev-parse --is-shallow-repository) sits INSIDE the queue boundary per AGENTS.md subprocess discipline. Empty-repo detection matches stderr substrings `does not have any commits yet` or `bad default revision 'head'` and returns empty rows instead of throwing — good. Shallow parse trims, lowercases, matches \"true\" — correct. commitLimitHit uses `commits.count >= Self.commitCap` so <200 commits correctly leaves flag false; exactly 200 or pathological over-count both flip it. Cancellation via `catch is CancellationError { return }` avoids clobbering state on focus-swap — correct. Selection routing via `select(sha:)` published as @Observable `selectedSHA` for future M7 observation. GraphViewContent computes laneCount from `(rows.map(\\.column).max() ?? 0) + 1` so every row aligns to the same lane count. 10 ViewModel tests use real GitFixtureHelper repos (no mocks). 5 snapshot tests cover ShallowCloneBanner + CommitLimitFooter + empty content, all md5-distinct. 4 XCUITests authored but not run (TCC deferred).",
+    "issues": [
+      {
+        "file": "Sources/Views/Graph/GraphView.swift",
+        "line": 51,
+        "severity": "medium",
+        "description": "`.onChange(of: focus.lastChangeAt) { _, _ in Task { await model.reload(for: focus) } }` spawns an UNSTRUCTURED Task per FSEvents tick. Internal `activeReload?.cancel()` in reload() cancels the previous model-level task — but the OUTER Task here is not cancelled, so a rapid burst of ticks spawns N outer tasks that each cancel N-1 inner tasks before running. Correctness holds (the final tick wins), but wasteful. Same pattern flagged at M3 for BranchListView / StatusHeaderView; M4 did NOT consolidate. Observation: this is the 3RD per-focus observer (branch-list + status-header + graph). INTERFACES.md §4 says consolidate before the 4th. M7 adds two more (uncommitted-diff + commit-diff) — so by the time M7 lands we'll be at 5 observers. The M4 worker's own handoff flags this in discoveredIssues. Strongly recommend a RepoDetailModel consolidation BEFORE M7-commit-diff."
+      },
+      {
+        "file": "Sources/ViewModels/GraphModel.swift",
+        "line": 77,
+        "severity": "non-blocking",
+        "description": "`reload(for:)` creates an inner `Task { await performReload(for: focus) }` and then `await task.value`. Given the outer call site already runs on MainActor and performReload is @MainActor, the inner Task serves only as a cancellation handle. Equivalent behavior could be achieved by tracking the surrounding Task via withTaskCancellationHandler + Task.isCancelled inside performReload, avoiding the extra Task allocation. Micro-optimization; leave as is if readability is preferred."
+      },
+      {
+        "file": "Sources/ViewModels/GraphModel.swift",
+        "line": 196,
+        "severity": "non-blocking",
+        "description": "Log-command worst-case output: 200 commits × ~190 bytes/commit (sha40 + parents + name + email + timestamp + avg-subject) ≈ ~38 KB. Well below Git.run's ~64 KB pipe-buffer boundary TODAY, but repos with long subject lines (300+ chars) or many parents could push past. Foundation scrutiny flagged this as a pre-M7 fix for Git.run. Recommend: (a) add `--no-notes --no-color --no-decorate` defensively (already implicit but worth being explicit), OR (b) move GraphModel's log call to Git.stream before M7, OR (c) prioritize the queued M1-fix-git-run-drain feature ahead of M5. Non-blocking at the typical case."
+      },
+      {
+        "file": "Sources/ViewModels/GraphModel.swift",
+        "line": 196,
+        "severity": "non-blocking",
+        "description": "The stderr substring match for empty-repo is fragile — localized git builds could surface the message differently. Kite enforces `LC_ALL=C` on Process env (AGENTS.md §4), so the message should stay English — but worth documenting the assumption at the matcher site."
+      },
+      {
+        "file": "Sources/Views/Graph/GraphView.swift",
+        "line": 105,
+        "severity": "non-blocking",
+        "description": "`errorState` is shown when `lastError != nil && rows.isEmpty` — but when a reload fails AFTER a successful prior reload, the previous rows are cleared (`rows = []` in the catch branch at GraphModel.swift:140). That means any transient failure wipes the list. Consider preserving the previous rows on error and surfacing a small error banner instead — smoother UX across flaky network or in-progress rebases."
+      }
+    ]
+  },
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-GRAPH-009", "VAL-GRAPH-010", "VAL-GRAPH-011"],
+    "unverified": [],
+    "note": "VAL-GRAPH-010 scroll-position preservation is architecturally provided by List + Identifiable.id == commit.sha (stable across reloads). No explicit UI test for scroll position exists; authored XCUITest testGraphRendersAfterFocus covers render-after-focus but not the scroll-position invariant. Defer to user-testing-validator-graph on a TCC host."
+  },
+  "testsSpotChecked": [
+    { "name": "reloadSetsCommitLimitHit", "result": "pass", "observation": "201 commits → rows.count == 200, commitLimitHit == true." },
+    { "name": "reloadHandlesEmptyRepo", "result": "pass", "observation": "Fresh `git init -b main` with no commits → empty rows, no error. Empty-repo stderr matcher works." },
+    { "name": "reloadSetsShallowFlag", "result": "pass", "observation": "file:// clone --depth=1 → isShallowRepo true. The file:// workaround is documented in handoff." }
+  ]
+}

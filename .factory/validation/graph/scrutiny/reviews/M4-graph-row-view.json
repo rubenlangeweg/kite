@@ -1,0 +1,38 @@
+{
+  "milestoneId": "M4-graph",
+  "featureId": "M4-graph-row-view",
+  "status": "pass-with-non-blocking-issues",
+  "commit": "5aa417c",
+  "codeReview": {
+    "summary": "GraphCell is a pure SwiftUI.Canvas view — value-types in, pixels out, no @Environment, no model. Geometry constants (laneWidth=14, rowHeight=22, dotRadius=4, lineWidth=1.5) are static on the type so the scroll container can reference them for layout. 3-segment edges via Path (move → stub → diagonal → stub → bottom) — no Bezier per decision #18. Straight case is a single line; bent case is a tangent stub + diagonal. Colors come from LaneColor.swiftUIColor (hand-tuned purple, system blue/orange/green/pink/teal) — dark-safe. Dot fills with the first out-edge's color keyed on its fromColumn (first-parent lane) and falls back to LanePalette.color(for: commit.sha) for leaf rows. hasRef bumps dot radius by 1pt; isSelected draws a 2pt accent ring. 8 snapshot cases md5-verified distinct including a dark-mode counterpart to the merge case. 3 unit tests guard columnX geometry and LaneColor mapping exhaustiveness.",
+    "issues": [
+      {
+        "file": "Sources/Views/Graph/GraphCell.swift",
+        "line": 9,
+        "severity": "non-blocking",
+        "description": "Typo in doc-comment: \"Establshed pattern\" → \"Established pattern\". Cosmetic."
+      },
+      {
+        "file": "Sources/Views/Graph/GraphCell.swift",
+        "line": 119,
+        "severity": "medium",
+        "description": "Dot fill prefers `row.outEdges.first(where: { $0.fromColumn == row.column })?.color` — for a merge commit with parents on multiple lanes, the first matching out-edge is the first-parent edge, so this is correct. But for true leaf rows GraphLayout.compute emits NO out-edges (root commits have parents==[]), so the fallback LanePalette.color(for: commit.sha) is what actually renders leaf dots. Since lane color should track the BRANCH, not the commit SHA, leaf dots get a different color than their descendants — a visual wart for orphan roots. Non-blocking for M4; worth revisiting if/when branch-name-driven coloring lands (flagged in M4-graph-layout handoff)."
+      },
+      {
+        "file": "Sources/Views/Graph/GraphCell.swift",
+        "line": 146,
+        "severity": "non-blocking",
+        "description": "`columnX(_:)` is `func` (internal) rather than `static func` even though it has no instance state beyond the constants. Making it static would let callers compute column positions without an instance. Not load-bearing — GraphRowContent already uses the instance indirectly."
+      }
+    ]
+  },
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-GRAPH-004", "VAL-GRAPH-005"],
+    "unverified": ["VAL-GRAPH-008"],
+    "note": "VAL-GRAPH-008 (60fps) can only be measured via Instruments on a real render; claim is architectural (per-row Canvas in virtualized List, bounded segment count per row). Defer to user-testing-validator-graph on a TCC-unblocked host."
+  },
+  "testsSpotChecked": [
+    { "name": "testDarkMode", "result": "pass", "observation": "MergeInbound-dark (ebb53c95) md5-distinct from MergeInbound-light (9d35fea0) — NSAppearance appearance swap is honored." },
+    { "name": "testOctopusMerge", "result": "pass", "observation": "3 straight-line in-edges all converging on column 0; dot at column 0; md5 fa3acc9e distinct." }
+  ]
+}

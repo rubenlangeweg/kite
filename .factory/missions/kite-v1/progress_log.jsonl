@@ -63,3 +63,13 @@
 {"event":"feature_complete","featureId":"M4-graph-layout","status":"completed","commit":"aff47d4","testsAdded":12,"testsFailingInherited":"RepoSidebarSnapshotTests,SettingsRootsTabSnapshotTests","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"shared_state_update","file":"AGENTS.md","description":"Validation gate now skip-tests RepoSidebar+SettingsRoots snapshot suites until M8-fix-snapshot-degeneracy","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"feature_start","featureId":"M4-graph-row-view","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M4-graph-row-view","status":"completed","commit":"5aa417c","testsAdded":11,"totalTestsGreen":156,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M4-graph-row-meta","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M4-graph-row-meta","status":"completed","commit":"8d19fc4","testsAdded":24,"totalTestsGreen":180,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M4-graph-scroll-container","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M4-graph-scroll-container","status":"completed","commit":"a8560c5","testsAdded":15,"totalTestsGreen":195,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_features_complete","milestone":"graph","featuresCompleted":4,"totalTestsGreen":195,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"scrutiny_start","milestone":"graph","round":1,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"scrutiny_complete","milestone":"graph","round":1,"status":"pass-with-non-blocking-issues","blockingIssues":0,"nonBlockingIssues":10,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_complete","milestone":"graph","testsGreen":195,"commits":4,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"m5_blocker","feature":"M5-pull-push","reason":"needs M1-fix-git-error-push-cases first","timestamp":"2026-04-19T00:00:00Z"}

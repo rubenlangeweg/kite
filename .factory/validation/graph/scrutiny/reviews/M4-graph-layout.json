@@ -1,0 +1,38 @@
+{
+  "milestoneId": "M4-graph",
+  "featureId": "M4-graph-layout",
+  "status": "pass-with-non-blocking-issues",
+  "commit": "aff47d4",
+  "codeReview": {
+    "summary": "GraphLayout.compute is a clean pure function split into 7 private helpers — claimColumn / consumeConvergingLanes / placeParents / placeOneParent / appendThroughLaneEdges / firstFreeSlot / trimTrailingNils. First-parent preference is correct (placeOneParent: parentIndex==0 reuses commitColumn unless an existing lane already waits). Column reuse after merge-back verified by columnReuseAfterMerge (peak lane stays at 1). Octopus path is straight-line + logger.debug observability — VAL-GRAPH-006 holds. LanePalette hashes with FNV-1a-32 over UTF-8 bytes (offset basis 0x811c9dc5, prime 0x01000193) and explicitly documents the anti-Swift-Hasher rationale. Trunk aliases {main, master, trunk, default, develop} short-circuit to .blue. Force-unwrap at LanePalette.swift:46 is guarded by the modulo with a justification comment — acceptable per AGENTS.md. LayoutRow & LaneEdge are value types, Codable with Int raw-valued LaneColor so the golden JSON is stable under enum reordering. Golden fixture (12-commit DAG mixing linear, feature-merge, orphan chain, octopus, isolated root) walks through correctly — M row opens lane 1 for E; E column 1 is NOT explicitly in the fixture because E merges at lane 1 after M opens it; O octopus has 3 parents landing at columns 0,1,2 but with other branches still occupying lanes the octopus at column 2 with outEdges to {2, 0, 3} matches the algorithm (4 out-edges because lane 1 is a through-lane). Re-verified by walking the JSON against the DAG. Algorithm is sound.",
+    "issues": [
+      {
+        "file": "Sources/Git/Layout/GraphLayout.swift",
+        "line": 60,
+        "severity": "medium",
+        "description": "`consumeConvergingLanes` always puts the commit's own column at the head of the returned list — and `processCommit` then emits an in-edge for it. Every commit (including true roots and orphan tips) gets a self-convergence in-edge at its own column, which the renderer happens to draw as a top-to-dot stub (visible in GraphCell.SingleDotNoEdges-via-layout being non-empty). This is intentional and documented in LayoutRow.swift, but the code reads as if the self-column is a 'converging' lane (it isn't — it's the dot-entry stub). Consider renaming the variable to `incomingColumns` and adding a one-line comment at `processCommit` that the first entry is the dot-entry stub, not a true converging lane."
+      },
+      {
+        "file": "Sources/Git/Layout/GraphLayout.swift",
+        "line": 31,
+        "severity": "non-blocking",
+        "description": "`Logger(subsystem: \"nl.rb2.kite\", category: \"layout\")` fires on every octopus merge. At M4 load time (once per reload) this is fine; if a future caller starts invoking compute() per frame (shouldn't, but possible in a SwiftUI binding), the log spam would be significant. Not an issue today."
+      },
+      {
+        "file": "Sources/Git/Layout/LanePalette.swift",
+        "line": 46,
+        "severity": "non-blocking",
+        "description": "Force-unwrap on `LaneColor(rawValue: Int(slot))!` is correct given `slot < allCases.count` and enum raw values are dense 0..<6, but the invariant depends on LaneColor's case ordering being continuous. A more defensive form would be `LaneColor.allCases[Int(slot)]`; cost is identical. Minor."
+      }
+    ]
+  },
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-GRAPH-002", "VAL-GRAPH-003", "VAL-GRAPH-004", "VAL-GRAPH-005", "VAL-GRAPH-006"],
+    "unverified": []
+  },
+  "testsSpotChecked": [
+    { "name": "goldenFixture", "result": "pass", "observation": "Fixtures/goldenFixture.json is 580 lines, diff-readable; spot-check of M/F/O/X rows matches the DAG walkthrough." },
+    { "name": "lanePaletteDeterministicForArbitraryName", "result": "pass", "observation": "5 baked FNV-1a-32 outputs pin the hash constants; regression against a constant edit is captured." },
+    { "name": "columnReuseAfterMerge", "result": "pass", "observation": "Peak lane stays at 1 across feature-x → feature-y; lane reuse invariant holds." }
+  ]
+}
