@@ -71,6 +71,14 @@ enum UITestFixtures {
         return url
     }
 
+    /// Exposed variant of the git runner for tests that need to shell out
+    /// against a fixture repo after it has been created (e.g. staging a
+    /// commit before launching the app). Uses the same hardened env as the
+    /// private `runGit`.
+    static func runGitForTest(_ args: [String], cwd: URL) throws {
+        try runGit(args, cwd: cwd)
+    }
+
     // MARK: - Private
 
     private static func environment() -> [String: String] {

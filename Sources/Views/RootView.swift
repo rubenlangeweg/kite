@@ -6,7 +6,7 @@ struct RootView: View {
             RepoSidebarView()
         } content: {
             VSplitView {
-                BranchListView()
+                BranchPaneView()
                     .frame(minHeight: 160, idealHeight: 320)
                 Text("Graph (M4)")
                     .foregroundStyle(.secondary)
