@@ -1,0 +1,111 @@
+{
+  "featureId": "M1-git-parsers",
+  "salientSummary": "Added 7 porcelain parsers + 7 domain models under Sources/Git/{Models,Parsers}/. 41 new Swift Testing cases (+ 17 preserved) → 58/58 green. VAL-PARSE-001 through VAL-PARSE-006 fulfilled. validation gate (build, tests, swiftformat --lint, swiftlint --strict) all exit 0.",
+  "whatWasImplemented": "Domain models (Sources/Git/Models/): Commit, Branch, Remote, RefKind (enum with localBranch/remoteBranch/tag/head cases), StatusSummary (with computed isClean), FileDiff/Hunk/DiffLine, ProgressEvent. All are value types conforming to Equatable; Sendable conformance is inherited implicitly for these internal types (swiftformat's redundantSendable rule strips explicit conformances, confirming Swift 6 auto-synthesis). Parsers (Sources/Git/Parsers/): ParseError enum (Error + LocalizedError, cases malformedLine / unexpectedEmpty / unrecognizedFormat / invalidField). BranchParser parses `git branch --list --format=%(refname:short)%00%(refname)%00%(objectname)%00%(upstream:short)%00%(upstream:track)%00%(HEAD)` — handles 6-field NUL-separated records, [gone]/[ahead N, behind M] tracking, HEAD `*` marker, remote-tracking refs, and skips the synthetic `(HEAD detached at …)` pseudo-row git emits in detached mode. LogParser parses `git log -z --format=…` as a flat NUL-delimited field stream of 6N fields, preserving parent arrays (including merges and octopus merges), and throws on non-numeric %at or misaligned field counts. StatusParser handles `git status --porcelain=v2 --branch -z` with a tiny ParseState struct, consumes rename/copy (type-2) records' trailing origPath, counts staged/modified/untracked, and extracts branch/upstream/ahead/behind — detached HEAD surfaces via branch=nil + detachedAt short-sha. ForEachRefParser builds a `[sha: [RefKind]]` map from `%(objectname) %(refname)%00%(*objectname)`, keying annotated tags on their peeled commit SHA and excluding HEAD/origin/HEAD pseudo-refs. DiffParser handles unified diffs with new-file/deleted-file/rename-from/rename-to headers, `Binary files … differ`, `\\ No newline at end of file`, multi-hunk bodies, and leading commit-header content from `git show`. ProgressParser is a stateful line consumer that splits on both \\r and \\n, buffers partial chunks across calls, strips leading `remote: `, recognises `<phase>: <N>% (a/b)` and `<phase>: N, done.` (nil percent), and deduplicates within the same (phase, percent) pair. Tests (Tests/KiteTests/GitTests/Parsers/): one file per parser, most using real git output via GitFixtureHelper (extended with capture + captureData + exec helpers); ProgressParserTests uses literal \\r strings per the SKILL exception. GitFixtureHelper.swift extended (not duplicated) with a public `capture`/`captureData`/`exec` surface; existing `tempURL` / `cleanRepo` / `cleanup` are untouched.",
+  "whatWasLeftUndone": "Sources/Git/Layout/ (column-reuse graph algorithm) is owned by the later feature M4-graph-layout, not this one — intentionally not created. `Branch.isRemote`/`remote` fields are computed from `refname` prefix on parse; M2 may want `Remote` list parsing from `git remote -v`, which would go in a future RemoteParser (not in this feature's scope). DiffParser does not yet handle git's quoted-path form for paths with spaces (`\"a/foo bar\"`); all VAL-PARSE-005 fixtures pass without it. If a future feature observes quoted-path diffs, extend extractDiffGitPaths.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Regenerated Kite.xcodeproj picking up Sources/Git/Models/*, Sources/Git/Parsers/*, Tests/KiteTests/GitTests/Parsers/* via directory scanning." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build (DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer)", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests", "exitCode": 0, "observation": "Test run with 58 tests in 9 suites passed after 4.485s. Suites: BranchParser (7), DiffParser (7), ErrorClassifier (13 — parameterised + fallbacks, preserved), ForEachRefParser (6), Git.run / Git.stream (10, preserved), LogParser (7), ProgressParser (8), StatusParser (6), Kite scaffold smoke (2, preserved). 41 new + 17 preserved = 58 total." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/33 files require formatting." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Done linting! Found 0 violations, 0 serious in 33 files." }
+    ],
+    "interactiveChecks": [
+      { "description": "Grep Sources for forbidden git verbs (--force, reset --hard, clean -f, git commit, git merge, git rebase, git stash, cherry-pick, push -f, force-with-lease)", "result": "Zero hits in any Process argument list. One match in Commit.swift is a doc-comment quoting the git log format string — not an invocation." },
+      { "description": "Verify parser contract: empty input returns empty collection (not throw) for BranchParser, LogParser, StatusParser, ForEachRefParser, DiffParser; ProgressParser.consume(\"\") returns nil", "result": "Each has a dedicated empty-input test case (BranchParser.emptyInputReturnsEmpty, LogParser.emptyRepo, StatusParser.emptyInputDoesNotThrow, ForEachRefParser.emptyInputEmptyMap, DiffParser.emptyInputEmpty, ProgressParser.emptyReturnsNil). All pass." },
+      { "description": "Verify merge/octopus parent arrays: built a real fixture with `git merge --no-ff` (2 parents) and `git merge --no-ff a b` (3 parents) and asserted commit.parents.count", "result": "LogParserTests.mergeHasTwoParents and octopusMerge both pass against real git output." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/GitTests/Parsers/BranchParserTests.swift",
+        "cases": [
+          { "name": "happy-path: local branch with feature/ prefix parses cleanly", "verifies": "VAL-PARSE-001" },
+          { "name": "empty input returns an empty array (not a throw)", "verifies": "VAL-PARSE-001" },
+          { "name": "tracking branch with ahead/behind gets counts extracted", "verifies": "VAL-PARSE-001" },
+          { "name": "[gone] upstream marker sets isGone and clears counts to 0", "verifies": "VAL-PARSE-001" },
+          { "name": "remote branches reported with isRemote + remote = 'origin'", "verifies": "VAL-PARSE-001" },
+          { "name": "detached-HEAD fixture: HEAD column is ' ' for every branch", "verifies": "VAL-PARSE-001" },
+          { "name": "malformed line (too few fields) throws ParseError", "verifies": "VAL-PARSE-001" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/GitTests/Parsers/LogParserTests.swift",
+        "cases": [
+          { "name": "happy-path: parses a 2-commit linear history from real git", "verifies": "VAL-PARSE-002" },
+          { "name": "empty repo produces an empty array (no throw)", "verifies": "VAL-PARSE-002" },
+          { "name": "merge commit preserves 2 parents in order", "verifies": "VAL-PARSE-002" },
+          { "name": "octopus merge with 3 parents is represented correctly", "verifies": "VAL-PARSE-002" },
+          { "name": "unicode subject survives round-trip", "verifies": "VAL-PARSE-002" },
+          { "name": "malformed timestamp throws ParseError", "verifies": "VAL-PARSE-002" },
+          { "name": "misaligned field count throws ParseError", "verifies": "VAL-PARSE-002" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/GitTests/Parsers/StatusParserTests.swift",
+        "cases": [
+          { "name": "clean repo parses as isClean and branch 'main'", "verifies": "VAL-PARSE-003" },
+          { "name": "mixed staged + modified + untracked produces correct counts", "verifies": "VAL-PARSE-003" },
+          { "name": "detached HEAD surfaces detachedAt short-sha and nil branch", "verifies": "VAL-PARSE-003" },
+          { "name": "no-upstream branch leaves upstream/ahead/behind at defaults", "verifies": "VAL-PARSE-003" },
+          { "name": "empty input is handled as clean empty summary (does not throw)", "verifies": "VAL-PARSE-003" },
+          { "name": "synthetic branch.ab parses ahead/behind correctly", "verifies": "VAL-PARSE-003" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/GitTests/Parsers/ForEachRefParserTests.swift",
+        "cases": [
+          { "name": "happy-path: local branches and a lightweight tag map to expected RefKinds", "verifies": "VAL-PARSE-004" },
+          { "name": "annotated tag is joined on its peeled commit SHA, not the tag-object SHA", "verifies": "VAL-PARSE-004" },
+          { "name": "symbolic HEAD pseudo-refs (HEAD, origin/HEAD) are excluded", "verifies": "VAL-PARSE-004" },
+          { "name": "empty input returns an empty dictionary", "verifies": "VAL-PARSE-004" },
+          { "name": "remote branch with nested slash parses remote='origin' and branch='feat/x'", "verifies": "VAL-PARSE-004" },
+          { "name": "malformed line (no space separator) throws", "verifies": "VAL-PARSE-004" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/GitTests/Parsers/DiffParserTests.swift",
+        "cases": [
+          { "name": "single-file add with real git output parses as new file", "verifies": "VAL-PARSE-005" },
+          { "name": "single-file delete reports newPath == nil", "verifies": "VAL-PARSE-005" },
+          { "name": "binary file diff is marked isBinary and has no hunks", "verifies": "VAL-PARSE-005" },
+          { "name": "\\ No newline at end of file is captured as a noNewlineMarker", "verifies": "VAL-PARSE-005" },
+          { "name": "multi-hunk diff parses each hunk with correct ranges", "verifies": "VAL-PARSE-005" },
+          { "name": "empty input returns an empty array", "verifies": "VAL-PARSE-005" },
+          { "name": "commit-header lines before first `diff --git` are skipped (git show)", "verifies": "VAL-PARSE-005" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/GitTests/Parsers/ProgressParserTests.swift",
+        "cases": [
+          { "name": "two distinct \\r-delimited lines produce two events (VAL-PARSE-006)", "verifies": "VAL-PARSE-006" },
+          { "name": "two consumes at the same percent emit only once (dedup)", "verifies": "VAL-PARSE-006" },
+          { "name": "phase transition emits a new event even at same percent", "verifies": "VAL-PARSE-006" },
+          { "name": "unparseable line returns nil", "verifies": "VAL-PARSE-006" },
+          { "name": "remote: prefix is stripped from phase but retained in raw", "verifies": "VAL-PARSE-006" },
+          { "name": "status line without percentage yields phase event with nil percent", "verifies": "VAL-PARSE-006" },
+          { "name": "partial chunk without terminator is buffered until a separator arrives", "verifies": "VAL-PARSE-006" },
+          { "name": "empty input returns nil", "verifies": "VAL-PARSE-006" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "swiftformat's `redundantSendable` rule strips explicit `Sendable` conformance from internal (non-public) structs and enums. Under Swift 6 language mode these types auto-synthesize Sendable conformance when all stored properties are Sendable, so the guarantee holds — but worker specs that say 'types must be Sendable' should expect the source to not carry the explicit conformance. If M4-graph-layout introduces public types that cross module boundaries, explicit `Sendable` will be required (the rule only removes redundant conformances).",
+      "affectsFeature": "future features introducing public types in Sources/Git/*"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "DiffParser does not yet handle git's quoted-path form for paths containing spaces (`diff --git \"a/foo bar\" \"b/foo bar\"`). All VAL-PARSE-005 tests pass, and regular-filename diffs in user repos under ~/Developer are the common case. If M7-uncommitted-diff / M7-commit-diff hits a repo whose files have spaces in names, extend `extractDiffGitPaths` to honour the quoted form.",
+      "affectsFeature": "M7-uncommitted-diff, M7-commit-diff"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "BranchParser skips the synthetic `(HEAD detached at abc1234)` pseudo-row that `git branch --list --format=...` emits when HEAD is detached. This is an explicit parser decision: M3-branch-list should surface detached HEAD by calling `git rev-parse HEAD` + `git symbolic-ref --short HEAD` (or reading StatusParser.detachedAt) instead of trying to treat the pseudo-row as a Branch."
+    }
+  ]
+}
