@@ -98,6 +98,13 @@ Features likely to use this worker: M1-project-scaffold, M1-persistence, M2-repo
 }
 ```
 
+## Established patterns to reuse
+
+- **Monotonic-tick auto-dismiss** for transient UI states (inline errors, toasts): `@State var tick: Int = 0; @State var error: String? = nil`. On trigger: `tick += 1; let mine = tick; error = msg; Task { try? await Task.sleep(for: .seconds(5)); if mine == tick { error = nil } }`. Race-free under rapid retriggers. Pattern precedent: `SettingsRootsTab.showInlineError`.
+- **App-level state injection:** cross-referenced `@State` models on the `@main App` struct + `.environment(...)` on the root view + `@Environment(Type.self)` in consumers. Precedent: `KiteApp` → `PersistenceStore`/`RepoSidebarModel`.
+- **Fixture-seed launch args:** any `-KITE_FIXTURE_*` CLI flag that mutates persistence MUST gate on `ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil`. Otherwise a developer accidentally passing the flag poisons real prefs.
+- **Snapshot testing discipline:** verify `md5` of all recorded PNGs differ before sign-off. Identical bytes = false green. Wrap `NSHostingController` targets with `.background(Color(nsColor: .windowBackgroundColor))` to force real rendering; snapshot row views individually instead of whole `List`/`Table`.
+
 ## When to return to orchestrator
 
 - Precondition feature's handoff says "done" but code isn't actually committed.

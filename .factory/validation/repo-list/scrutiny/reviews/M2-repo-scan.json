@@ -1,0 +1,56 @@
+{
+  "milestoneId": "M2-repo-list",
+  "featureId": "M2-repo-scan",
+  "commit": "487f39d",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "RepoScanner is cleanly implemented as a pure-FS, depth-1 scanner: TaskGroup parallelises per-root enumeration, indices preserve caller-provided root order, and inside each root FileManager.contentsOfDirectory is called exactly once. Bare detection is the correct HEAD+objects/ combo with both type-checks. Missing roots logged via os.Logger (subsystem nl.rb2.kite, category 'repo') and return empty slices — matches the 'swallow + log' guidance. 10 tests green, the 50-repo perf smoke lives well inside the <200ms VAL-REPO-001 budget. File ownership respected: all changes inside Sources/Repo/ and Tests/KiteTests/RepoTests/, no UI or Persistence touched.",
+    "issues": [
+      {
+        "file": "Sources/Repo/RepoScanner.swift",
+        "line": 44,
+        "severity": "non-blocking",
+        "description": "`roots.enumerated().map { ($0.offset, $0.element) }` before TaskGroup is a tiny allocation but also makes the order-preservation contract implicit. A one-line doc-comment on scan(roots:) noting 'returned list preserves caller-provided root order and sorts by displayName within each root' would save the next reader a re-read. Functionally fine."
+      },
+      {
+        "file": "Sources/Repo/RepoScanner.swift",
+        "line": 75,
+        "severity": "non-blocking",
+        "description": "isRepo's work-tree detection accepts `.git` as either dir or file (gitlink), but the `gitIsDir` ObjCBool is read only for shape and never inspected. Consider either asserting `.git`-as-file parsing (read the `gitdir: ...` pointer) for bare-repo-with-worktree corner cases, OR deleting the unused `gitIsDir` variable to clarify that both shapes are accepted. Minor readability."
+      },
+      {
+        "file": "Sources/Repo/RepoScanner.swift",
+        "line": 102,
+        "severity": "non-blocking",
+        "description": "scanRoot standardises `root.standardizedFileURL` locally, but the returned DiscoveredRepo's `rootPath` still comes from that standardised value — good — while RepoSidebarModel.resolveRoots() also standardises via `.standardizedFileURL` when deduping. The two paths are consistent today; consider adding a single `Sources/Repo/RootPath.swift` helper or a DiscoveredRepo extension to formalise the canonical-URL invariant before M3 consumers start comparing rootPaths across layers."
+      },
+      {
+        "file": "Sources/Repo/DiscoveredRepo.swift",
+        "line": 9,
+        "severity": "non-blocking",
+        "description": "`id: URL` is fine but note that Identifiable on a URL-keyed value means two repos discovered via different-but-symlinked paths would be treated as distinct. Depth-1 scan of `~/Developer` rarely hits this, but once a user adds `/Volumes/...` roots (symlinked) the sidebar could show duplicates. Non-blocking for M2; flag for user-testing-validator-repo-list to exercise."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Scanner error-handling mirrors the 'swallow + log' precedent established in foundation (Logger.error with os subsystem + category) rather than throwing. Consistent with AGENTS.md guidance added after foundation round 1.",
+      "evidence": "Sources/Repo/RepoScanner.swift lines 106, 118-121"
+    },
+    {
+      "area": "testing",
+      "observation": "Tests create real on-disk fixture repos via Process invocations to `/usr/bin/git` directly from the XCTest harness — no mocking. Matches AGENTS.md §Testing guidance. The GitFixtureHelper abstraction mentioned in AGENTS.md is not yet extracted; M3 should centralise.",
+      "evidence": "Tests/KiteTests/RepoTests/RepoScannerTests.swift helper methods"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-REPO-001",
+      "VAL-REPO-002",
+      "VAL-REPO-005",
+      "VAL-REPO-006"
+    ],
+    "unverified": []
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "milestone": "repo-list",
+  "round": 1,
+  "status": "pass-with-non-blocking-issues",
+  "validatorsRun": {
+    "xcodegen": {
+      "exitCode": 0,
+      "observation": "xcodegen generate: project regenerated cleanly; SnapshotTesting package attached to KiteTests only."
+    },
+    "build": {
+      "exitCode": 0,
+      "observation": "xcodebuild -scheme Kite -configuration Debug build: ** BUILD SUCCEEDED ** with zero warnings. Ad-hoc signed Kite.app produced."
+    },
+    "test": {
+      "exitCode": 0,
+      "observation": "xcodebuild test -scheme Kite -destination 'platform=macOS' -only-testing:KiteTests: 98 Swift Testing cases in 14 suites passed + 9 XCTest snapshot cases in 2 suites passed = 107 total green. Suites added this milestone: RepoScanner (10), RepoSidebarModel (8), SettingsRootsTabLogic (8), RepoSidebarSnapshotTests (5), SettingsRootsTabSnapshotTests (4). Previous 72 from foundation still green. KiteUITests NOT run (TCC blocker on this host — explicit direction from task brief)."
+    },
+    "swiftformat": {
+      "exitCode": 0,
+      "observation": "swiftformat Sources Tests --lint: 0/57 files require formatting."
+    },
+    "swiftlint": {
+      "exitCode": 0,
+      "observation": "swiftlint --strict: 0 violations in 57 files."
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 0,
+    "passedWithNonBlocking": 3,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "M2-settings-roots",
+      "file": "Tests/KiteTests/ViewTests/__Snapshots__/SettingsRootsTabSnapshotTests/*.png",
+      "line": 0,
+      "description": "All 4 SettingsRootsTab snapshot references are byte-identical (MD5 d10d012d...); the captured image shows only headers + empty Table columns with no rows. NSHostingController snapshot of a view containing SwiftUI Table does not complete row layout without an appearance cycle, so testWithTwoExtraRoots / testWithMissingExtraRoot / testWithTwoExtraRootsDarkMode all render the same empty-table image as testEmptyExtraRoots. Snapshots pass because empty == empty. VAL-REPO-003 / VAL-REPO-005 / VAL-UI-010 snapshot-level evidence is degraded. Logic layer IS covered by SettingsRootsTabLogicTests (8 cases); feature correctness is demonstrated. Recommend refactoring the snapshot tests to either (a) render a static rows-list view without Table, or (b) defer snapshot-level proof to user-testing-validator-repo-list which can drive the real window. Do not simply re-record — that locks in empty-table references."
+    },
+    {
+      "featureId": "M2-repo-sidebar",
+      "file": "Tests/KiteTests/ViewTests/__Snapshots__/RepoSidebarSnapshotTests/testRepoRowDarkMode.RepoRow-dark.png",
+      "line": 0,
+      "description": "Dark-mode RepoRow reference is byte-identical (MD5 b519ca7d...) to the light-mode RepoRow reference. Empty-state light and dark are also identical (MD5 47fe1945...). `.preferredColorScheme(.dark)` on an NSHostingController over a transparent-background view produces the same raster as light mode. VAL-UI-010 dark-mode parity is not actually exercised by these snapshots. Handoff flagged this as 'needs human review'; elevating here because it affects 3 of the 5 RepoSidebar snapshots and 1 of the 4 SettingsRoots snapshots. Fix: host the view under a themed Color.background or against a NavigationSplitView to force dark-mode rendering."
+    },
+    {
+      "featureId": "M2-repo-sidebar",
+      "file": "Sources/App/KiteApp.swift",
+      "line": 77,
+      "description": "`try? store.addExtraRoot(expanded)` in applyFixtureExtraRoots silently swallows ExtraRootError, contradicting AGENTS.md §Observability 'swallow + log' convention added after foundation round 1. More importantly: applyFixtureExtraRoots runs unconditionally on every KiteApp.init(). PersistenceStore defaults to UserDefaults.standard. If the app is launched with `-KITE_FIXTURE_EXTRA_ROOTS <path>` (e.g. a developer pasting the wrong launch arg set), it poisons the user's real UserDefaults. Mitigated today because XCUITests don't run on this host. Fix: (1) gate on ProcessInfo.processInfo.environment['XCTestConfigurationFilePath'] != nil before applying, (2) replace `try?` with `do { try ... } catch { logger.error(...) }`."
+    },
+    {
+      "featureId": "M2-repo-sidebar",
+      "file": "project.yml",
+      "line": 63,
+      "description": "xcodegen auto-detects non-Swift files in `Tests/KiteTests` as resources of the KiteTests target. The PNG reference images under Tests/KiteTests/ViewTests/__Snapshots__/ are bundled into KiteTests.xctest/Contents/Resources. Deleting a reference (e.g. to re-record) breaks the build with 'Build input file cannot be found'. Coupling: the snapshot-record workflow now depends on xcodegen regeneration order. Fix: add `excludes: ['**/__Snapshots__/**']` to the KiteTests target's sources glob."
+    },
+    {
+      "featureId": "M2-repo-sidebar",
+      "file": "Sources/Views/Sidebar/RepoSidebarView.swift",
+      "line": 31,
+      "description": "`.task { await model.refresh(); await model.restoreLastSelection() }` runs on every view appearance. If the view ever re-appears (window reopen / ⌘N / scene-phase change), restoreLastSelection would overwrite an in-session user selection. Low probability today; gate behind a one-shot flag in RepoSidebarModel before M3-repo-focus-lifecycle wires real task lifecycles."
+    },
+    {
+      "featureId": "M2-settings-roots",
+      "file": "Sources/Views/Settings/SettingsRootsTab.swift",
+      "line": 40,
+      "description": "Per-row 'Scan now' button calls `sidebarModel.refresh()` which rescans ALL roots, not just the row's root. UX expectation: per-row action is scoped to that row. Either remove the per-row button (global Scan now in the header already exists) or add a `refresh(roots:)` parameter so per-row becomes actually per-root. Non-blocking for M2, flag for user-testing-validator-repo-list."
+    },
+    {
+      "featureId": "M2-repo-sidebar",
+      "file": "Sources/ViewModels/RepoSidebarModel.swift",
+      "line": 67,
+      "description": "refresh() sets `isScanning = true` unconditionally. Toolbar refresh button disables via isScanning so double-click is prevented there, but SettingsRootsTab 'Scan now' (header + per-row) and future auto-refresh can double-trigger. Make refresh() a no-op when already scanning, or serialize via a single owned Task handle."
+    },
+    {
+      "featureId": "M2-settings-roots",
+      "file": "Sources/Views/Settings/SettingsRootsTab.swift",
+      "line": 68,
+      "description": "Two transient SettingsRootsModel instances exist on first render: the .onAppear-created one and the throwaway fallbackRows one. inlineError state from the fallback instance is not observed by the view. Construct rootsModel in the parent or use an eager @State initialisation pattern."
+    },
+    {
+      "featureId": "carry-over",
+      "file": "Sources/Persistence/PersistenceStore.swift",
+      "line": 163,
+      "description": "Carry-over from foundation round 1: load()/write() still swallow errors with comments only, no os.Logger.error call. AGENTS.md was updated to require 'swallow + log' after foundation, but the existing PersistenceStore code was not retrofitted. M2 did not regress this but did not address it. Should land before M5-auto-fetch writes Settings toggles routinely."
+    },
+    {
+      "featureId": "M2-repo-scan",
+      "file": "Sources/Repo/DiscoveredRepo.swift",
+      "line": 9,
+      "description": "Identifiable via `id: URL` — two symlinked paths to the same repo would appear as distinct sidebar rows. Corner case; non-blocking for depth-1 `~/Developer` usage. Document as a known limitation in library/git-cli-integration.md once a user hits it."
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "file": "AGENTS.md",
+      "change": "Add to Known gotchas → SwiftUI / macOS: 'Snapshot tests of SwiftUI containers that rely on List/Table layout cycles (NavigationSplitView, Table) do not complete row layout under NSHostingController without a proper view-appearance cycle. Either (a) snapshot individual row/cell views rather than the containing Table, (b) wrap the host in a .background(Color) to force at least a visible backdrop for dark-mode parity, or (c) defer to XCUITest/manual coverage. Do NOT accept byte-identical references across different test cases — if MD5 matches across empty/populated/dark, the snapshot is degenerate. Spot-check with `md5 Tests/.../__Snapshots__/**/*.png` before sign-off.'",
+      "rationale": "M2-repo-sidebar and M2-settings-roots both produced degenerate snapshots. Without guidance, every future UI feature will repeat the pattern. M3-branch-list, M4 graph rows, M7 diff all have Table/List content that will hit this."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Add to Known gotchas → SwiftUI / macOS: 'XCUITest launch-argument hooks (-KITE_FIXTURE_ROOTS, -KITE_FIXTURE_EXTRA_ROOTS, and any future variants) must (a) gate on ProcessInfo.processInfo.environment[\"XCTestConfigurationFilePath\"] != nil before mutating PersistenceStore.standard, and (b) log via os.Logger rather than try?. PersistenceStore defaults to UserDefaults.standard; a stray launch-arg invocation can poison production preferences.'",
+      "rationale": "Current applyFixtureExtraRoots is load-bearing for XCUITest once TCC unblocks; it needs hardening before real CI runs."
+    },
+    {
+      "file": "INTERFACES.md",
+      "change": "Add under §3 File ownership: 'xcodegen auto-resources: any non-Swift file under a target's sources path is bundled as a resource. Snapshot reference PNGs under Tests/**/__Snapshots__/ should be explicitly excluded via `excludes: [\"**/__Snapshots__/**\"]` in project.yml to decouple the record workflow from the build graph.'",
+      "rationale": "Production observation: removing a reference PNG currently breaks the build. Future snapshot maintenance will trip over this."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Add under Conventions → SwiftUI patterns: 'The canonical top-level shape is @Observable @MainActor view models owned by the App via @State, injected via .environment(instance), consumed via @Environment(Type.self) in child views. KiteApp now follows this for PersistenceStore + RepoSidebarModel. M3+ view models (M3-branch-list, M3-status-header, etc.) should follow the same pattern rather than introducing per-view @StateObject / ObservableObject.'",
+      "rationale": "M2 established the pattern successfully; codifying now prevents divergence in M3's multiple new @Observable view models."
+    },
+    {
+      "file": "skills/swiftui-worker/SKILL.md",
+      "change": "Document the 'inline error + monotonic tick counter' dismissal pattern from SettingsRootsTab.showInlineError. The captured-tick comparison at wake-up is race-free for stacked auto-dismiss tasks and is the shape future error surfaces (toast auto-dismiss in M5-toast-infrastructure, branch-create error in M6) should reuse.",
+      "rationale": "Pattern will repeat across M5 toasts (5s success auto-dismiss) and M6 branch-create errors. Document so the swiftui-worker doesn't reinvent it."
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilledThisMilestone": [
+      "VAL-REPO-001",
+      "VAL-REPO-002",
+      "VAL-REPO-003",
+      "VAL-REPO-004",
+      "VAL-REPO-005",
+      "VAL-REPO-006",
+      "VAL-REPO-007",
+      "VAL-REPO-008",
+      "VAL-REPO-009",
+      "VAL-UI-007",
+      "VAL-UI-008"
+    ],
+    "anyOrphansOrFailures": [
+      {
+        "assertion": "VAL-UI-010",
+        "status": "partial",
+        "note": "Claimed by M2-repo-sidebar via testEmptyStateDarkMode + testRepoRowDarkMode, and by M2-settings-roots via testWithTwoExtraRootsDarkMode. All three dark references are byte-identical to their light counterparts (NSHostingController transparent backdrop issue). Runtime dark-mode behaviour is almost certainly correct — SwiftUI respects the preference — but the snapshot evidence does not prove it. Elevate to user-testing-validator-repo-list for System Appearance toggle verification."
+      },
+      {
+        "assertion": "VAL-REPO-007",
+        "status": "partial",
+        "note": "The <500ms selection-to-render budget is only measurable end-to-end via testSelectingRepoUpdatesDetailPaneWithin500ms, which is TCC-blocked. ViewModel unit tests cover the mechanism (selection → persistence write) but not the wall-clock budget. Defer full validation to the post-TCC-unblock XCUITest re-run; scrutiny alone cannot close this."
+      },
+      {
+        "assertion": "VAL-REPO-008",
+        "status": "partial",
+        "note": "Same caveat: last-selected-repo-restored-on-relaunch is covered by RepoSidebarModelTests.restoreLastSelectionFindsMatchingRepo (unit-level) but only XCUITest testLastSelectedRepoRestoredOnRelaunch exercises the full quit/relaunch path. Defer to post-TCC re-run."
+      }
+    ]
+  },
+  "deferredUserTestingFollowUps": [
+    "Re-run Tests/KiteUITests/RepoSidebarUITests.swift and Tests/KiteUITests/SettingsRootsUITests.swift on a TCC-unblocked host (Accessibility + Automation prompts accepted).",
+    "Visually review Tests/KiteTests/ViewTests/__Snapshots__/*/*.png at full resolution with the app side-by-side under System Appearance → Dark; expect the flagged dark-mode snapshots to be degenerate.",
+    "Exercise the Add Folder → NSOpenPanel flow manually; unit tests and logic layer can't drive the panel."
+  ],
+  "previousRound": null
+}

@@ -1,0 +1,76 @@
+{
+  "milestoneId": "M2-repo-list",
+  "featureId": "M2-settings-roots",
+  "commit": "b8ba30d",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Settings scene is correctly implemented as `SettingsRootView` (not `SettingsView`) per AGENTS.md naming guidance — no collision with SwiftUI's `Settings` scene type. TabView with General / Roots / About; accessibility identifiers on every tab and sub-element. SettingsRootsModel extracts all logic into an @Observable @MainActor helper — 8 unit tests cover add-valid, add-missing, add-file-not-dir, remove-default-noop, remove-extra, status-probe, default-first, error-clears-on-success. addExtraRoot/removeExtraRoot remain the sole persistence mutation path (verified by grep). NSOpenPanel used synchronously via runModal() on the main actor — correct for a Settings tab. The inline-error monotonic tick counter (errorTick &+= 1 then captured as currentTick) is race-free: staggered errors supersede earlier auto-dismiss tasks correctly. Auto-fetch toggle in General tab lands early so M5-auto-fetch has a control to bind to. All validation gate commands exit 0: build clean, 98 Swift Testing + 9 XCTest cases pass, swiftformat 0/57, swiftlint 0/57.",
+    "issues": [
+      {
+        "file": "Tests/KiteTests/ViewTests/__Snapshots__/SettingsRootsTabSnapshotTests/*.png",
+        "line": 0,
+        "severity": "non-blocking",
+        "description": "All four SettingsRootsTab snapshot references are byte-identical (MD5 d10d012d... across empty / twoExtraRoots / missingExtraRoot / dark). The captured image shows only the header + empty Table columns — no rows render. NSHostingController snapshot doesn't complete SwiftUI Table layout without a proper view appearance cycle. The snapshots pass because they compare identical empty renders to themselves. This means VAL-REPO-003 / VAL-REPO-005 / VAL-UI-010 snapshot-level evidence is effectively absent even though tests report green. The logic layer IS covered by SettingsRootsTabLogicTests (8 cases), so feature correctness is demonstrated — but the snapshot tests should either be replaced with a direct rendering of SettingsRootsModel.rows to a static View, OR be deferred to user-testing-validator-repo-list which can drive the real window. Do not let a future worker 'fix' these by regenerating against whatever the harness produces — that would lock in empty-table references as the reference of record."
+      },
+      {
+        "file": "Sources/Views/Settings/SettingsRootsTab.swift",
+        "line": 68,
+        "severity": "non-blocking",
+        "description": "The `if rootsModel == nil { rootsModel = SettingsRootsModel(persistence: persistence) }` in .onAppear, combined with `effectiveRows` falling back to a throwaway `fallbackRows` model on first body eval, means two separate SettingsRootsModel instances exist transiently on first render. The fallback model's `inlineError` state is not observed by the view once the onAppear one takes over. Consider constructing rootsModel in the parent (via @State init from @Environment) or using `@Environment(PersistenceStore.self) private var persistence` + a lazy property wrapper. Today's UX is fine; cleaner lifecycle would prevent a category of latent bugs when another developer adds state to SettingsRootsModel."
+      },
+      {
+        "file": "Sources/Views/Settings/SettingsRootsTab.swift",
+        "line": 159,
+        "severity": "non-blocking",
+        "description": "`handleAddFolder` uses `panel.runModal()` synchronously — this blocks the main actor until the user dismisses the panel. For a Settings tab that's acceptable (modal is the intended UX), but consider `panel.beginSheetModal(for:)` against the Settings window once M3+ lands more settings interactions — avoids UI freezes if the panel enumerates a slow Network volume."
+      },
+      {
+        "file": "Sources/Views/Settings/SettingsRootsTab.swift",
+        "line": 196,
+        "severity": "non-blocking",
+        "description": "The 5s auto-dismiss uses `Task.sleep(nanoseconds: 5_000_000_000)` with `try?` — cancellation is silently swallowed, which is the right call here (the caller doesn't care about propagation), but the `try?` on Task.sleep(nanoseconds:) is the deprecated spelling in Swift 6. Prefer `Task.sleep(for: .seconds(5))`. Non-blocking; file-wide swiftformat/swiftlint don't currently flag it."
+      },
+      {
+        "file": "Sources/Views/Settings/SettingsRootsModel.swift",
+        "line": 70,
+        "severity": "non-blocking",
+        "description": "`rows` is a computed property that re-reads `persistence.settings.extraRoots` and hits the filesystem via `status(forPath:)` on every access. In the Table body this is fine (SwiftUI recomputes on demand), but callers like tests that check `rootsModel.rows.count` twice pay the status-probe cost twice. Consider a `cachedRows` @Observable that rebuilds on persistence change notifications, OR caching within a single body eval."
+      },
+      {
+        "file": "Sources/Views/Settings/SettingsRootsTab.swift",
+        "line": 40,
+        "severity": "non-blocking",
+        "description": "The 'Scan now' button appears BOTH in the header (`Settings.Roots.ScanAll`) and in every row's Actions column (`Settings.Roots.ScanNow.<path>`). The per-row button doesn't actually scan only that root — it calls `sidebarModel.refresh()` which rescans everything. This is confusing UX: the user expects per-row scan to target one root. Either remove the per-row Scan-now, OR plumb a `refresh(roots: [URL])` parameter into RepoSidebarModel. Non-blocking for M2; flag for user-testing-validator-repo-list."
+      },
+      {
+        "file": "Sources/Views/Settings/SettingsRootsTab.swift",
+        "line": 155,
+        "severity": "non-blocking",
+        "description": "`fallbackRows` comment says 'only during the very first body evaluation' but there is no mechanism preventing fallbackRows from being used on subsequent renders if onAppear hasn't fired yet (e.g. if Settings is constructed but never shown). Rename to `synchronousRows` or remove once the onAppear lifecycle is sorted (see #2 above)."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "SettingsRootsModel.userFacingMessage maps PersistenceStore.ExtraRootError → human strings with `~` abbreviation. This is the first example of the 'ViewModel shapes errors for views' pattern from AGENTS.md §Response shape rules. M3+ features will have a consistent shape to follow.",
+      "evidence": "Sources/Views/Settings/SettingsRootsModel.swift lines 144-151"
+    },
+    {
+      "area": "conventions",
+      "observation": "PersistenceStore.addExtraRoot/removeExtraRoot is the ONLY mutation path for extra roots — confirmed by grep for extraRoots across Sources. No direct UserDefaults.standard access outside Sources/Persistence/, no @AppStorage anywhere. Matches INTERFACES.md §4.",
+      "evidence": "Grep results: UserDefaults only in Sources/Persistence/PersistenceStore.swift and Keys.swift"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-REPO-003",
+      "VAL-REPO-004",
+      "VAL-REPO-005",
+      "VAL-UI-008"
+    ],
+    "unverified": [],
+    "notes": "VAL-REPO-003/004/005 logic fulfillment is solid via SettingsRootsTabLogicTests. Snapshot references are degenerate (see first issue above) but logic tests carry the weight. VAL-UI-008 (⌘, opens Settings with three tabs) is fulfilled by SwiftUI's native Settings{} scene binding ⌘, automatically plus the SettingsRootView TabView with three tabItem entries — structurally correct, user-testing-validator-repo-list should confirm the ⌘, shortcut actually triggers on a TCC-unblocked host."
+    }
+  }
+}

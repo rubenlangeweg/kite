@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 @main
@@ -7,19 +8,22 @@ struct KiteApp: App {
 
     init() {
         let store = PersistenceStore()
-        // XCUITest hook: `-KITE_FIXTURE_EXTRA_ROOTS <path>[:<path>...]` seeds
-        // the persisted extra-roots list before any view binds. Only honoured
-        // for UI tests; production launches never inject this argument.
-        KiteApp.applyFixtureExtraRoots(to: store)
+        // XCUITest hooks: only honoured when running under XCTest. In production
+        // the env var is absent, so these args can never reach real prefs even
+        // if someone passes them by accident. See `isRunningUnderXCTest`.
+        if Self.isRunningUnderXCTest {
+            KiteApp.applyFixtureExtraRoots(to: store)
+        }
 
         _persistence = State(wrappedValue: store)
 
-        // XCUITest hook: `-KITE_FIXTURE_ROOTS <path>[,<path>...]` overrides
-        // the default `~/Developer` root with test-provided fixture directories.
-        // Only honoured for UI tests; normal launches ignore it.
-        let rootsOverride = KiteApp.fixtureRootsFromLaunchArgs()
+        let rootsOverride = Self.isRunningUnderXCTest ? KiteApp.fixtureRootsFromLaunchArgs() : nil
         let model = RepoSidebarModel(persistence: store, rootsOverride: rootsOverride)
         _sidebarModel = State(wrappedValue: model)
+    }
+
+    private static var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     var body: some Scene {
@@ -70,11 +74,16 @@ struct KiteApp: App {
         let paths = raw.split(separator: ":", omittingEmptySubsequences: true).map(String.init)
         for path in paths {
             let expanded = (path as NSString).expandingTildeInPath
-            // Best-effort add. Paths that don't exist are intentionally
-            // dropped here — XCUITests that want invalid-path UI coverage
-            // invoke the Settings UI's Add flow instead of relying on
-            // pre-seeded bad state.
-            try? store.addExtraRoot(expanded)
+            // Best-effort add. Invalid paths are logged but not raised —
+            // XCUITests that want invalid-path UI coverage invoke the
+            // Settings UI's Add flow instead of relying on pre-seeded bad
+            // state.
+            do {
+                try store.addExtraRoot(expanded)
+            } catch {
+                Logger(subsystem: "nl.rb2.kite", category: "app")
+                    .error("applyFixtureExtraRoots dropped \(expanded, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 }

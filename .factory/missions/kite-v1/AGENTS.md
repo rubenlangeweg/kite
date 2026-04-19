@@ -148,6 +148,13 @@ The running app has no HTTP endpoint. Healthcheck is:
 - **Fixtures:** the `GitFixtureHelper` in `Tests/Support/` is the single source of truth for creating git fixtures. Use `.clean()`, `.oneCommit()`, `.diverged()`, `.withSubmodule()`, `.bare()`, `.shallow()`, `.detached()` etc.
 - **No mocking of `git`.** Kite's value is correct behavior against real git. Use fixture repos.
 
+## Established patterns
+
+- **App-level state with cross-reference:** `@State private var persistence: PersistenceStore` + `@State private var sidebarModel: RepoSidebarModel` on `@main struct KiteApp: App`, initialized via `init()`, injected via `.environment(...)` on the `WindowGroup`'s root view. Consumer views pick up via `@Environment(Type.self)`. This is the idiom for shared app state — use it for any future shared model (e.g. a future `GitQueue` in M3).
+- **Inline-error auto-dismiss (SettingsRootsTab.showInlineError):** monotonic tick counter — every call increments a local tick, spawns a 5s `Task.sleep`, then clears the error only if the current tick still matches. Race-free against rapid re-triggers. Reuse for M5 toast banners and M6 validation messages.
+- **Snapshot tests must not be byte-identical across cases.** Verify with `md5` after recording; two snapshots producing identical bytes is a false green. Reference images from `NSHostingController` over transparent backgrounds can degenerate for `List`/`Table` rows or `.preferredColorScheme(.dark)`. Force a representative container background (`.background(Color(nsColor: .windowBackgroundColor))`) when recording Dark-mode references, and snapshot row views individually rather than whole Tables.
+- **XCUITest launch-arg hooks must gate on XCTest.** Any `-KITE_FIXTURE_*` argument handler in production code must check `ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil` before mutating persisted state. A developer passing a flag by accident must never poison real prefs.
+
 ## Known gotchas
 
 ### SwiftUI / macOS

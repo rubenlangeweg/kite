@@ -1,0 +1,78 @@
+{
+  "milestoneId": "M2-repo-list",
+  "featureId": "M2-repo-sidebar",
+  "commit": "4367812",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "RepoSidebarModel is a clean @Observable @MainActor facade over RepoScanner + PersistenceStore. Scanner is injected as a @Sendable closure (excellent test seam). OrderedRepoGroups preserves insertion order, is Equatable, and prunes empty roots. RepoSidebarView uses NavigationSplitView with .navigationSplitViewColumnWidth(min:200, ideal:260, max:400) per AGENTS.md gotcha #5; selection is a Binding routed through model.select() which persists the last-opened path. EmptyRepoList correctly uses ContentUnavailableView and wires the 'Add folder…' action through @Environment(\\.openSettings). Context-menu pin/unpin/Show-in-Finder/Copy-path implemented via NSWorkspace + NSPasteboard. 8 ViewModel tests pass. XCUITests authored but not executed (TCC-blocked — expected). SwiftUI patterns are consistent: @Observable + @Environment(Type.self), @State owning the PersistenceStore and RepoSidebarModel at the App level, no ObservableObject anywhere.",
+    "issues": [
+      {
+        "file": "Tests/KiteTests/ViewTests/__Snapshots__/RepoSidebarSnapshotTests/testRepoRowDarkMode.RepoRow-dark.png",
+        "line": 0,
+        "severity": "non-blocking",
+        "description": "The recorded dark-mode RepoRow reference is byte-identical (MD5 b519ca7d...) to the light-mode RepoRow reference. `preferredColorScheme(.dark)` on an NSHostingController over a view with no explicit background produces a transparent canvas and the same rasterised foreground glyphs as light mode, so VAL-UI-010 dark-mode parity is not actually exercised by this snapshot. The testEmptyState dark-mode reference shows the same issue (identical to light). Logic works at runtime; evidence-of-done via snapshot is degraded. Recommend wrapping the view under test with a themed Color.background or capturing against a NavigationSplitView host in a follow-up rather than gating M3."
+      },
+      {
+        "file": "Sources/App/KiteApp.swift",
+        "line": 77,
+        "severity": "non-blocking",
+        "description": "`try? store.addExtraRoot(expanded)` silently swallows the ExtraRootError. AGENTS.md §Observability codifies 'swallow + log' — no bare silent catches. Add Logger.error for the failure path. The broader concern is that applyFixtureExtraRoots runs unconditionally on every launch; if a developer accidentally launches the real app with `-KITE_FIXTURE_EXTRA_ROOTS`, it poisons the user's real UserDefaults (PersistenceStore defaults to .standard). Consider gating on ProcessInfo.processInfo.environment['XCTestConfigurationFilePath'] or similar test-only marker. Mitigated in practice: XCUITests don't currently run on this host."
+      },
+      {
+        "file": "Sources/Views/Sidebar/RepoSidebarView.swift",
+        "line": 31,
+        "severity": "non-blocking",
+        "description": "`.task { await model.refresh(); await model.restoreLastSelection() }` runs every time the view appears. SwiftUI views can re-appear (window reopen, scene phase change). On a subsequent appearance, restoreLastSelection would overwrite an in-session user selection if the app ever starts with a lastOpenedRepo matching a fresh scan. Consider gating restoreLastSelection behind a one-shot @State bool, or moving it into the model as `ensureInitialSelection()` that no-ops after first run."
+      },
+      {
+        "file": "Sources/ViewModels/RepoSidebarModel.swift",
+        "line": 67,
+        "severity": "non-blocking",
+        "description": "`refresh()` sets `isScanning = true` unconditionally; the doc-comment claims re-entrant callers 'observe isScanning and should no-op' but the method itself does not guard. The toolbar refresh button already disables via `model.isScanning`, so duplicate calls are mostly prevented — but programmatic callers (SettingsRootsTab 'Scan now', future auto-refresh) can still double-trigger. Consider making refresh() a no-op when isScanning is already true, OR serialize via a single TaskHandle the model owns."
+      },
+      {
+        "file": "Sources/Views/Sidebar/RepoSidebarView.swift",
+        "line": 85,
+        "severity": "non-blocking",
+        "description": "`selectionBinding` writes through `model.select(...)`, which unconditionally calls `persistence.setLastOpenedRepo(...)` -> `save()` on every click. Per foundation round-1 non-blocker #10 on setWindowFrame, persistence writes on high-frequency events should be debounced before M8 binds them to live signals; sidebar selection is nowhere near that frequency but establishes a pattern — keep in mind."
+      },
+      {
+        "file": "Sources/ViewModels/RepoSidebarModel.swift",
+        "line": 143,
+        "severity": "non-blocking",
+        "description": "Root dedup uses `standardizedFileURL` but also stores the original caller-provided URL (non-standardised) in the `roots` array when it's the default. Downstream `apply(rootOrder:)` then calls `.standardizedFileURL` again. Safe today; consider normalising once at ingress so all comparison keys are canonical (prevents a future 'why does `~/Developer` not match `/Users/<me>/Developer`' bug)."
+      },
+      {
+        "file": "project.yml",
+        "line": 63,
+        "severity": "non-blocking",
+        "description": "xcodegen bundles Tests/KiteTests/ViewTests/__Snapshots__/*.png as resources of the KiteTests target (auto-detected non-Swift files). Removing a reference PNG breaks the build with 'Build input file cannot be found' — which subtly couples the snapshot-record workflow to xcodegen regeneration. Add an explicit `excludes:` for `**/__Snapshots__/**` on the KiteTests sources glob to decouple."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "patterns",
+      "observation": "The @Observable + @Environment(Type.self) + @State at App level pattern is now load-bearing: KiteApp owns both PersistenceStore and RepoSidebarModel; views receive via environment. This is the canonical SwiftUI 6 pattern per library/swiftui-macos.md §3 and should be documented in AGENTS.md as the required shape for M3+ ViewModels.",
+      "evidence": "Sources/App/KiteApp.swift lines 5-23, Sources/Views/Sidebar/RepoSidebarView.swift line 12"
+    },
+    {
+      "area": "testing",
+      "observation": "Snapshot coverage shape differs across SwiftUI containers: simple views (EmptyRepoList, RepoRow) render fine; complex containers (Table in SettingsRootsTab) render empty without a view appearance cycle. Any M3+ feature using Table or List in snapshot tests will hit the same issue.",
+      "evidence": "Tests/KiteTests/ViewTests/__Snapshots__/ PNG hashes"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-REPO-007",
+      "VAL-REPO-008",
+      "VAL-REPO-009",
+      "VAL-UI-007"
+    ],
+    "unverified": [
+      "VAL-UI-010"
+    ],
+    "notes": "VAL-UI-010 (dark-mode parity) is claimed by RepoSidebarSnapshotTests but the recorded references do not functionally differ between light and dark (transparent NSHostingController background). Runtime behaviour is unverified; user-testing-validator-repo-list should confirm by opening the app under System Appearance → Dark. VAL-REPO-007's <500ms selection-update budget can only be measured end-to-end via the TCC-blocked XCUITest testSelectingRepoUpdatesDetailPaneWithin500ms — until that re-runs, the ViewModel test covers the mechanism but not the wall-clock constraint."
+    ]
+  }
+}
