@@ -7,6 +7,11 @@ struct KiteApp: App {
 
     init() {
         let store = PersistenceStore()
+        // XCUITest hook: `-KITE_FIXTURE_EXTRA_ROOTS <path>[:<path>...]` seeds
+        // the persisted extra-roots list before any view binds. Only honoured
+        // for UI tests; production launches never inject this argument.
+        KiteApp.applyFixtureExtraRoots(to: store)
+
         _persistence = State(wrappedValue: store)
 
         // XCUITest hook: `-KITE_FIXTURE_ROOTS <path>[,<path>...]` overrides
@@ -30,7 +35,9 @@ struct KiteApp: App {
         }
 
         Settings {
-            SettingsPlaceholderView()
+            SettingsRootView()
+                .environment(persistence)
+                .environment(sidebarModel)
         }
     }
 
@@ -47,11 +54,27 @@ struct KiteApp: App {
         guard !paths.isEmpty else { return [] }
         return paths.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
     }
-}
 
-private struct SettingsPlaceholderView: View {
-    var body: some View {
-        Text("Settings (populated in M2-settings-roots)")
-            .frame(width: 480, height: 320)
+    /// Parse `-KITE_FIXTURE_EXTRA_ROOTS <colon-separated-paths>` and seed the
+    /// store's extra-roots list. Tests use this to stage a specific extra-roots
+    /// state before launching the app — real launches ignore it.
+    ///
+    /// Colons match the UNIX `PATH` separator convention so test fixtures
+    /// don't collide with commas that can appear in legitimate path names.
+    private static func applyFixtureExtraRoots(to store: PersistenceStore) {
+        let args = ProcessInfo.processInfo.arguments
+        guard let idx = args.firstIndex(of: "-KITE_FIXTURE_EXTRA_ROOTS"), idx + 1 < args.count else {
+            return
+        }
+        let raw = args[idx + 1]
+        let paths = raw.split(separator: ":", omittingEmptySubsequences: true).map(String.init)
+        for path in paths {
+            let expanded = (path as NSString).expandingTildeInPath
+            // Best-effort add. Paths that don't exist are intentionally
+            // dropped here — XCUITests that want invalid-path UI coverage
+            // invoke the Settings UI's Add flow instead of relying on
+            // pre-seeded bad state.
+            try? store.addExtraRoot(expanded)
+        }
     }
 }
