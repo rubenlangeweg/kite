@@ -8,10 +8,9 @@ struct RootView: View {
             VSplitView {
                 BranchPaneView()
                     .frame(minHeight: 160, idealHeight: 320)
-                Text("Graph (M4)")
-                    .foregroundStyle(.secondary)
+                GraphView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .accessibilityIdentifier("kite.graphPlaceholder")
+                    .accessibilityIdentifier("kite.graphPane")
             }
             .navigationSplitViewColumnWidth(min: 260, ideal: 360, max: 520)
             .accessibilityIdentifier("kite.content")

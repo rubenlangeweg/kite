@@ -1,0 +1,61 @@
+{
+  "featureId": "M4-graph-scroll-container",
+  "salientSummary": "GraphModel @Observable loads log+refs+HEAD+shallow concurrently inside a single focus.queue.run; GraphView composes GraphRowContent rows into a List with ShallowCloneBanner and CommitLimitFooter; RootView wired to render GraphView in the middle column bottom pane. 10 ViewModel tests + 5 snapshot tests + 4 authored XCUITests. 195 tests green (was 180). VAL-GRAPH-009, VAL-GRAPH-010, VAL-GRAPH-011 fulfilled.",
+  "whatWasImplemented": "Added Sources/ViewModels/GraphModel.swift (@Observable @MainActor with rows/isLoading/isShallowRepo/commitLimitHit/lastError/selectedSHA; reload cancels prior Task; performReload wraps 4 concurrent async-let Git.run calls inside ONE focus.queue.run block per git-engine-worker subprocess discipline; parses log → LogParser → GraphLayout.compute → GraphRowRefs.enrich; detects empty-repo stderr to return empty rows instead of throwing; detects shallow via `rev-parse --is-shallow-repository`; commitLimitHit when commits.count >= 200). Added Sources/Views/Graph/GraphView.swift with stateful outer GraphView (observes RepoStore.focus, reacts to .task(id:) and focus.lastChangeAt onChange) and pure inner GraphViewContent struct-of-values (snapshot-testable). Extracted ShallowCloneBanner and CommitLimitFooter as internal views so snapshot tests can drive them directly. Rewired Sources/Views/RootView.swift middle column bottom pane from Text(\"Graph (M4)\") placeholder to GraphView(). Extended Tests/KiteUITests/Support/UITestFixtures.swift with makeShallowRepo(...) (uses file:// for --depth to take effect on local clones) and makeLargeRepo(..., commitCount: 205). Added Tests/KiteTests/ViewModelTests/GraphModelTests.swift with 10 @Test cases (linear, refs, HEAD, detached, shallow, commit-cap, empty, invalid-repo, select, clear). Added Tests/KiteTests/ViewTests/GraphViewSnapshotTests.swift with 5 cases (shallow banner light/dark, commit-limit footer light/dark, empty GraphViewContent). Added Tests/KiteUITests/GraphUITests.swift with 4 XCUITests authored (renders, selection, shallow banner, commit-limit footer). Snapshot refs recorded under Tests/KiteTests/ViewTests/__Snapshots__/GraphViewSnapshotTests/ — 5 PNGs all md5-distinct.",
+  "whatWasLeftUndone": "Real M7 diff-pane observation of selectedSHA (tracked under M7-commit-diff). XCUITests authored but not run (TCC permissions gate deferred per AGENTS.md — same state as every other XCUITests suite). Manual launch verification skipped — no display harness available in this environment; declaring this as not-performed rather than claiming pass.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "project regenerated with new ViewModel, View, and test files" },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED (only pre-existing Sendable warnings in RepoSidebarModel.swift, unrelated to this feature)" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests", "exitCode": 0, "observation": "164 Swift Testing tests + 31 XCTest tests = 195 total passed (was 180 baseline; +10 GraphModel cases and +5 GraphView snapshots)" },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/97 files require formatting" },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "0 violations in 97 files" },
+      { "command": "find __Snapshots__/GraphViewSnapshotTests -name '*.png' -exec md5 -r {} \\; | awk '{print $1}' | sort -u | wc -l", "exitCode": 0, "observation": "5 — every snapshot byte-distinct, no degenerate false-greens" }
+    ],
+    "interactiveChecks": [
+      { "action": "No manual app launch performed — this worker had no display harness available for end-to-end GUI verification. The feature's rendering path is covered by GraphRowContentSnapshotTests (M4-graph-row-meta) at row granularity + GraphViewSnapshotTests at banner/footer granularity + GraphModelTests at data-loading granularity. The first host with a display should run `xcodebuild -scheme Kite -configuration Debug build && open Kite.app` against a fixture repo to confirm end-to-end visual behaviour (per mission §8 healthcheck).", "observed": "N/A — declared not-performed per swiftui-worker SKILL.md step 8 rule" }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/ViewModelTests/GraphModelTests.swift",
+        "cases": [
+          { "name": "reloadPopulatesRowsForLinearRepo", "verifies": "VAL-GRAPH-010" },
+          { "name": "reloadPopulatesRefs", "verifies": "VAL-GRAPH-010" },
+          { "name": "reloadDetectsCurrentBranch", "verifies": "VAL-GRAPH-010" },
+          { "name": "reloadDetachedHeadHasNoHEADPill", "verifies": "VAL-GRAPH-010" },
+          { "name": "reloadSetsShallowFlag", "verifies": "VAL-GRAPH-011" },
+          { "name": "reloadSetsCommitLimitHit", "verifies": "VAL-GRAPH-001" },
+          { "name": "reloadHandlesEmptyRepo", "verifies": "VAL-GRAPH-010" },
+          { "name": "reloadReportsErrorOnInvalidRepo", "verifies": "VAL-GRAPH-010" },
+          { "name": "selectUpdatesState", "verifies": "VAL-GRAPH-009" },
+          { "name": "clearEmptiesState", "verifies": "VAL-GRAPH-010" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/GraphViewSnapshotTests.swift",
+        "cases": [
+          { "name": "testShallowBannerLight", "verifies": "VAL-GRAPH-011" },
+          { "name": "testShallowBannerDark", "verifies": "VAL-GRAPH-011" },
+          { "name": "testCommitLimitFooterLight", "verifies": "VAL-GRAPH-001" },
+          { "name": "testCommitLimitFooterDark", "verifies": "VAL-GRAPH-001" },
+          { "name": "testEmptyGraphViewContent", "verifies": "VAL-GRAPH-010" }
+        ]
+      },
+      {
+        "file": "Tests/KiteUITests/GraphUITests.swift",
+        "cases": [
+          { "name": "testGraphRendersAfterFocus", "verifies": "VAL-GRAPH-010" },
+          { "name": "testCommitTapSetsSelection", "verifies": "VAL-GRAPH-009" },
+          { "name": "testShallowBannerAppears", "verifies": "VAL-GRAPH-011" },
+          { "name": "testCommitLimitFooterAppears", "verifies": "VAL-GRAPH-001" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    { "severity": "non-blocking", "description": "`git clone --depth=N <local-path>` silently ignores --depth with the warning `--depth is ignored in local clones; use file:// instead.` — observed on git 2.50.1. Both the ViewModel test (reloadSetsShallowFlag) and UITestFixtures.makeShallowRepo now use `file://` prefixes to force shallow. Worth referencing in library/git-cli-integration.md §13 edge cases when someone next touches the library docs; not something a user-facing Kite flow cares about (Kite never shallow-clones — the user does, via terminal)." },
+    { "severity": "non-blocking", "description": "GraphModel currently runs via its own reload task (activeReload) on top of the focus.queue.run boundary — meaning cancellation via activeReload.cancel() relies on Task.checkCancellation() inside performReload + Git.run's withTaskCancellationHandler propagation. This works, but AGENTS.md flagged that before adding a 4th per-focus observer the pattern should consolidate into a shared RepoDetailModel. This feature is the 3rd observer (branch-list + status-header + graph); M7-uncommitted-diff and M7-commit-diff together take us to 4+. The consolidation should happen before M7-commit-diff ships. Not blocking M4.", "affectsFeature": "M7-commit-diff" }
+  ]
+}

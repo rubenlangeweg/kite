@@ -62,6 +62,38 @@ enum UITestFixtures {
         return repoURL
     }
 
+    /// Create a shallow clone: build a fresh "origin" repo with `commitCount`
+    /// commits, then `git clone --depth=1` into `<name>`. Returns the shallow
+    /// checkout URL.
+    @discardableResult
+    static func makeShallowRepo(
+        named name: String,
+        under root: URL,
+        commitCount: Int = 5
+    ) throws -> URL {
+        let originURL = root.appendingPathComponent("\(name)-origin")
+        try makeRepo(named: "\(name)-origin", under: root)
+        for index in 0 ..< max(0, commitCount - 1) {
+            try runGit(["commit", "--allow-empty", "-m", "c-\(index)"], cwd: originURL)
+        }
+
+        let shallowURL = root.appendingPathComponent(name)
+        // file:// is required because local (non-file://) clones ignore
+        // --depth and print a warning, leaving the clone non-shallow.
+        try runGit(["clone", "--depth=1", "file://\(originURL.path)", shallowURL.path], cwd: root)
+        return shallowURL
+    }
+
+    /// Create a repo with more than 200 commits so the graph hits its cap.
+    @discardableResult
+    static func makeLargeRepo(named name: String, under root: URL, commitCount: Int = 205) throws -> URL {
+        let repoURL = try makeRepo(named: name, under: root)
+        for index in 0 ..< max(0, commitCount - 1) {
+            try runGit(["commit", "--allow-empty", "-m", "c-\(index)"], cwd: repoURL)
+        }
+        return repoURL
+    }
+
     /// Create a fresh root directory under the system temp dir. Caller owns
     /// cleanup.
     static func makeTempRoot(prefix: String) throws -> URL {
