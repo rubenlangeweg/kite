@@ -58,3 +58,8 @@
 {"event":"shared_state_update","file":"INTERFACES.md","description":"Added per-focus observer fan-out discipline (consolidate to RepoDetailModel before 4th observer)","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"shared_state_update","file":"skills/git-engine-worker/SKILL.md","description":"Added Subprocess discipline section: minimize count per refresh, concurrent fan-out, 64KB Git.run boundary","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_complete","milestone":"branch-list","testsGreen":142,"commits":4,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_start","milestone":"graph","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M4-graph-layout","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M4-graph-layout","status":"completed","commit":"aff47d4","testsAdded":12,"testsFailingInherited":"RepoSidebarSnapshotTests,SettingsRootsTabSnapshotTests","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"AGENTS.md","description":"Validation gate now skip-tests RepoSidebar+SettingsRoots snapshot suites until M8-fix-snapshot-degeneracy","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M4-graph-row-view","timestamp":"2026-04-19T00:00:00Z"}

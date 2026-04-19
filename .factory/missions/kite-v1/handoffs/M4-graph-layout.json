@@ -1,0 +1,79 @@
+{
+  "featureId": "M4-graph-layout",
+  "salientSummary": "Column-reuse DAG layout algorithm with first-parent preference implemented as pure function GraphLayout.compute([Commit]) -> [LayoutRow]; 12 Swift Testing cases green including golden-fixture round-trip, lane-reuse, octopus-merge straight-line fallback, and cross-run color stability (FNV-1a-32 hash, never Swift.Hasher). 145 tests total (135 Swift Testing + 10 XCTest) pass; 2 pre-existing snapshot test suites remain broken from prior milestones (RepoSidebarSnapshotTests, SettingsRootsTabSnapshotTests) and are NOT regressed by this feature. swiftformat + swiftlint --strict both clean. Fulfills VAL-GRAPH-002, VAL-GRAPH-003, VAL-GRAPH-004, VAL-GRAPH-005, VAL-GRAPH-006.",
+  "whatWasImplemented": "Sources/Git/Models/LayoutRow.swift — LayoutRow + LaneEdge structs. LayoutRow: Equatable, Identifiable (id == commit.sha so it plugs straight into SwiftUI List), Codable. Fields: commit (Commit), column (Int), inEdges/outEdges ([LaneEdge]), refs ([RefKind] — always [] here; M4-graph-row-meta owns ref resolution). LaneEdge: Equatable, Codable. Fields: fromColumn, toColumn, color (LaneColor). Through-lanes are encoded as an inEdge+outEdge pair with fromColumn == toColumn at the same column — the renderer treats that as a single straight vertical. Sendable stripped (swiftformat's redundantSendable rule: internal structs with all-Sendable fields conform implicitly).\n\nSources/Git/Layout/LanePalette.swift — LaneColor enum (blue=0, purple, orange, green, pink, teal; Int-raw-valued so fixture JSON is stable under case reordering) + LanePalette enum namespace. LanePalette.color(for:) short-circuits main/master/trunk/default/develop → .blue (VAL-GRAPH-005), else hashes via FNV-1a-32 over UTF-8 bytes (offset basis 0x811c9dc5, prime 0x01000193) mod 6 → LaneColor case. Explicitly NOT using Swift's Hasher / String.hashValue — those are per-process randomized and would violate VAL-GRAPH-004.\n\nSources/Git/Layout/GraphLayout.swift — enum GraphLayout with static func compute([Commit]) -> [LayoutRow]. Algorithm follows library/git-graph-rendering.md §1 verbatim:\n  1) claimColumn — leftmost lane expecting commit.sha, else firstFreeSlot, else append. Clears that lane.\n  2) consumeConvergingLanes — any other lane waiting on same SHA is cleared and recorded; those are branches merging into the commit from above.\n  3) In-edges: one per converging column, colored by commit.sha (VAL-GRAPH-004-compatible seed).\n  4) placeParents (with placeOneParent helper): (a) if a lane is already waiting on the parent, join it (diamond avoidance); (b) else if parentIndex == 0, keep the commit's column (first-parent preference — VAL-GRAPH-003); (c) else take firstFreeSlot. Works for octopus merges too — parents 2..N just keep grabbing free slots (VAL-GRAPH-006).\n  5) Octopus observability: commits with >2 parents log a debug line via os.Logger(subsystem: nl.rb2.kite, category: layout) per AGENTS.md's never-silently-swallow rule.\n  6) Out-edges: one per parent, colored by the parent SHA so descending strands read as their branch's color.\n  7) appendThroughLaneEdges — for every still-occupied lane not touched by this commit's parent placement, emit an inEdge+outEdge pair at (index, index) with the waiting SHA's color. That's how the renderer knows to draw a vertical branch-line behind the commit dot.\n  8) trimTrailingNils on the lanes vector keeps it small across a long history.\nComplexity O(N · L) where L is peak lane count; the per-commit body was split into private helpers to stay under swiftlint's cyclomatic_complexity and function_body_length limits.\n\nSources/Git/Models/Commit.swift / RefKind.swift — added Codable conformance. Needed transitively by LayoutRow's fixture encoding. Purely additive — no existing parser / consumer touched.\n\nTests/KiteTests/GraphLayoutTests/GraphLayoutTests.swift — 12 @Test cases under @Suite(\"GraphLayout\"):\n  (1) empty input returns empty output — the zero case.\n  (2) single commit lands in lane 0 with no edges — the one-commit case; asserts the commit's own column has a self-convergence in-edge and no out-edges for a root.\n  (3) linear history stays in lane 0 for every row — 5-commit chain, asserts column == 0 everywhere.\n  (4) two-branch merge places first-parent in lane 0, second-parent in lane 1, reuses lane on merge back — the canonical merge shape (A merge of [B,C], both with parent D); asserts exact column+edge values including first-parent edge from A to B at column 0 and A's lane-1-opening edge for C.\n  (5) octopus merge (>2 parents) emits one straight-line out-edge per parent — 3-parent root-parents case; asserts 3 out-edges all rooted at commitColumn with toColumns == [0,1,2] (VAL-GRAPH-006).\n  (6) first-parent lane is preserved across a chain of merges — 3 successive feature-branch merges, asserts the mainline's merge commits and the final root all sit at column 0 (VAL-GRAPH-003).\n  (7) a lane freed by a merge-back is reused by a later divergent branch — 8-commit DAG with two sequential feature merges; asserts the 2nd feature's new secondary lane reuses column 1 (peak lane == 1, never grows to 2).\n  (8) compute twice on the same commits yields identical rows (bitwise-equal edge colors).\n  (9) main / master / trunk / default / develop all map to .blue — trunk-name override (VAL-GRAPH-005).\n  (10) LanePalette is deterministic for arbitrary names — self-consistency + 5 baked FNV-1a-32 outputs verifying each non-blue palette slot lands (slots 1,2,4,5 plus the post-hash .blue collision). The baked values guard against accidental edits to the offset basis / prime.\n  (11) 200-commit linear history lays out in well under 50ms — ContinuousClock perf ceiling; typical measurement is <1ms on M1. Catches quadratic regressions.\n  (12) golden fixture JSON matches computed layout — loads Tests/KiteTests/GraphLayoutTests/Fixtures/goldenFixture.json and diffs against the live output (VAL-GRAPH-002).\n\nTests/KiteTests/GraphLayoutTests/GraphLayoutTestsGoldenFixture.swift — fixture helper with commits() (hand-built 12-commit DAG: linear main chain A→B→D→F→M, feature merge-back at E, orphan chain X→Y→Z, octopus O with parents [F,D,C], isolated root P) and loadReference() (reads fixture JSON via #filePath; if missing, record-mode: writes current compute() output so the next run diffs against it — same shape as swift-snapshot-testing's isRecording behavior).\n\nTests/KiteTests/GraphLayoutTests/Fixtures/goldenFixture.json — committed reference JSON (~10KB, pretty-printed with sorted keys and ISO-8601 dates so PR diffs are human-readable).\n\nUsed os.Logger (not print) for octopus observability; hardcoded paths never reached (no subprocess at all in this feature — pure algorithm).",
+  "whatWasLeftUndone": "Ref resolution (the `refs: [RefKind]` on each LayoutRow) is intentionally empty here — that's M4-graph-row-meta's scope. The field exists so the downstream view can assume its shape without a model migration.\n\nBranch-name-based coloring of lanes is deferred: v1 colors each lane by the parent SHA the lane currently carries (stable per revision, not per branch). Doing true branch-name coloring requires a second pass that threads commit→ref resolution into the layout, which doesn't belong in this feature. VAL-GRAPH-004 is still fulfilled because the same commits → same colors; the scrutiny pass for M4 can decide whether v1 wants branch-name coloring before M4-graph-row-view lands.\n\nThe two pre-existing broken snapshot suites (RepoSidebarSnapshotTests, SettingsRootsTabSnapshotTests — 8 test cases across both) remain broken. These were flagged in the M3-status-header handoff's discoveredIssues and are scrutiny-validator-repo-list's territory — not this feature's. I verified the failures are identical to the baseline at HEAD 397890b (no snapshot reference was touched by this commit).\n\nLayout cache (actor GraphLayoutEngine from library §7) not built — the v1 brief only requires the pure function. A cache layer will live in a ViewModel during M4-graph-scroll-container.",
+  "verification": {
+    "commandsRun": [
+      {
+        "command": "xcodegen generate",
+        "exitCode": 0,
+        "observation": "Created project at /Users/ruben/Developer/gitruben/kite/Kite.xcodeproj"
+      },
+      {
+        "command": "xcodebuild -scheme Kite -configuration Debug build",
+        "exitCode": 0,
+        "observation": "** BUILD SUCCEEDED **"
+      },
+      {
+        "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests/GraphLayoutTests",
+        "exitCode": 0,
+        "observation": "12 of 12 GraphLayout tests passed in 0.019s"
+      },
+      {
+        "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests",
+        "exitCode": 0,
+        "observation": "** TEST SUCCEEDED ** — 135 Swift Testing cases in 20 suites + 10 XCTest cases passed in 40.6s. Skipped suites are PRE-EXISTING failures not caused by this feature (handed off from M3-status-header discoveredIssues)."
+      },
+      {
+        "command": "swiftformat Sources Tests --lint",
+        "exitCode": 0,
+        "observation": "0/81 files require formatting"
+      },
+      {
+        "command": "swiftlint --strict",
+        "exitCode": 0,
+        "observation": "Done linting! Found 0 violations, 0 serious in 81 files"
+      }
+    ],
+    "interactiveChecks": [
+      {
+        "action": "Sanity-check the golden fixture round-trip in both record and verify modes",
+        "observed": "First run of testGoldenFixture wrote Tests/KiteTests/GraphLayoutTests/Fixtures/goldenFixture.json (record mode, triggered because the file was absent). Second run loaded that committed JSON and compared equal to the live output. Subsequent refactor of GraphLayout internals (extracting private helpers for complexity budget) did NOT perturb the fixture — same test passed without touching the JSON."
+      }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/GraphLayoutTests/GraphLayoutTests.swift",
+        "cases": [
+          { "name": "emptyInputReturnsEmpty", "verifies": "VAL-GRAPH-002" },
+          { "name": "singleCommitSingleLane", "verifies": "VAL-GRAPH-002" },
+          { "name": "linearHistoryStaysInLaneZero", "verifies": "VAL-GRAPH-003" },
+          { "name": "twoBranchMerge", "verifies": "VAL-GRAPH-002" },
+          { "name": "octopusMergeUsesStraightLines", "verifies": "VAL-GRAPH-006" },
+          { "name": "firstParentStaysInLane", "verifies": "VAL-GRAPH-003" },
+          { "name": "columnReuseAfterMerge", "verifies": "VAL-GRAPH-002" },
+          { "name": "colorStableAcrossCalls", "verifies": "VAL-GRAPH-004" },
+          { "name": "lanePaletteMainIsBlue", "verifies": "VAL-GRAPH-005" },
+          { "name": "lanePaletteDeterministicForArbitraryName", "verifies": "VAL-GRAPH-004" },
+          { "name": "perf200Commits", "verifies": "VAL-GRAPH-002" },
+          { "name": "goldenFixture", "verifies": "VAL-GRAPH-002" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "Two pre-existing snapshot suites (KiteTests/RepoSidebarSnapshotTests — 5 cases; KiteTests/SettingsRootsTabSnapshotTests — 4 cases) fail against their committed PNG references. Already flagged in the M3-status-header handoff for scrutiny-validator-repo-list. I verified these are NOT regressed by this feature (I only added new source files and added Codable conformance to Commit/RefKind — no change to any view or snapshot-using test). Running the Kite tests while skipping those two suites yields ** TEST SUCCEEDED **. Flagging here again so scrutiny-validator-graph can confirm the baseline state is clean before merging the milestone.",
+      "affectsFeature": "scrutiny-validator-repo-list"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "Per-lane coloring currently keys on the parent SHA the lane carries, not the branch name. Result: color is stable per revision (VAL-GRAPH-004 fulfilled) but does NOT yet honor \"same branch, same color across merges and rebases\" — that requires joining commit→ref resolution into the layout, which is a cross-cutting concern that would force M4-graph-layout to know about refs. Proposed follow-up: a second enrichment pass in M4-graph-row-meta that takes the [LayoutRow] + [sha: [RefKind]] map and rewrites each edge's color to the dominant branch-name color for that lane. Can be a pure helper next to LanePalette; no change to GraphLayout.compute.",
+      "affectsFeature": "M4-graph-row-meta"
+    }
+  ]
+}

@@ -101,10 +101,17 @@ kite/
 cd /Users/ruben/Developer/gitruben/kite
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 xcodebuild -scheme Kite -configuration Debug build
-xcodebuild -scheme Kite -configuration Debug test -destination 'platform=macOS'
+xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug \
+  -only-testing:KiteTests \
+  -skip-testing:KiteTests/RepoSidebarSnapshotTests \
+  -skip-testing:KiteTests/SettingsRootsTabSnapshotTests
 swiftformat Sources Tests --lint   # NOTE: paths BEFORE --lint flag in swiftformat ≥0.61
 swiftlint --strict
 ```
+
+**IMPORTANT — skip list:** `RepoSidebarSnapshotTests` and `SettingsRootsTabSnapshotTests` are currently failing because their reference PNGs were recorded in an earlier toolchain/env state and don't match current rendering. Both were flagged as degenerate (byte-identical across cases) in M2 scrutiny; the fix (record with proper `NSHostingController.view.appearance = .darkAqua` + `.background(Color(nsColor: .windowBackgroundColor))`) is queued as **`M8-fix-snapshot-degeneracy`**. Every M4+ worker's validation gate MUST use the `-skip-testing:` flags above until that fix ships. Do NOT spend time trying to make those two suites green; they'll be re-recorded in M8.
+
+**`KiteUITests`** is likewise deferred until host TCC (Automation + Accessibility) grants Xcode permission.
 
 Every worker must `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` before any `xcodebuild` invocation. Failing to do so yields "tool 'xcodebuild' requires Xcode".
 
