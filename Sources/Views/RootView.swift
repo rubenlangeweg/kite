@@ -1,17 +1,19 @@
 import SwiftUI
 
 struct RootView: View {
-    @State private var contentSelection: String?
-
     var body: some View {
         NavigationSplitView {
             RepoSidebarView()
         } content: {
-            List(selection: $contentSelection) {
-                Text("Branches and graph")
+            VSplitView {
+                BranchListView()
+                    .frame(minHeight: 160, idealHeight: 320)
+                Text("Graph (M4)")
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("kite.graphPlaceholder")
             }
-            .navigationSplitViewColumnWidth(min: 260, ideal: 360)
+            .navigationSplitViewColumnWidth(min: 260, ideal: 360, max: 520)
             .accessibilityIdentifier("kite.content")
         } detail: {
             Text("Diff")
