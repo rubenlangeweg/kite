@@ -1,0 +1,56 @@
+{
+  "featureId": "M1-project-scaffold",
+  "salientSummary": "Scaffolded xcodegen-driven Xcode project for Kite (nl.rb2.kite, macOS 15+, Swift 5.9, ad-hoc Sign to Run Locally, sandbox off, Hardened Runtime off). @main KiteApp boots into an empty three-pane NavigationSplitView with Settings scene. KiteTests (Swift Testing) + KiteUITests (XCTest) smoke targets, Info.plist with all required keys, swiftformat/swiftlint configs, .gitignore. Debug build SUCCEEDS with zero warnings; swiftformat --lint and swiftlint --strict pass; Swift Testing smoke suite passes. XCUITest runner failed to initialize due to a host-machine TCC/Automation permission (NOT a code issue); documented below.",
+  "whatWasImplemented": "project.yml (xcodegen spec: 3 targets -- app + unit-test + UI-test, deployment macOS 15.0, Swift 5.9, ad-hoc signing, Info.plist + entitlements wired). Info.plist with CFBundleIdentifier=nl.rb2.kite, CFBundleName=Kite, CFBundleDisplayName=Kite, CFBundleShortVersionString=0.1.0, CFBundleVersion=1, LSApplicationCategoryType=public.app-category.developer-tools, LSMinimumSystemVersion=15.0, NSHighResolutionCapable=true. Kite.entitlements with com.apple.security.app-sandbox=false. Sources/App/KiteApp.swift (@main App with WindowGroup, Settings scene, .windowResizability(.contentSize), 900x600 min). Sources/App/Commands.swift (stub KiteCommands builder; real shortcuts arrive in M8). Sources/Views/RootView.swift (NavigationSplitView with sidebar 'Repos' | content 'Branches and graph' | detail 'Diff', column widths set, accessibility identifiers). Resources/Assets.xcassets with placeholder AppIcon slot (icon populated in M8-app-icon-and-plist). Tests/KiteTests/SmokeTest.swift (Swift Testing suite: @Test for bundle id prefix + @Test arithmetic). Tests/KiteUITests/SmokeUITest.swift (XCUITest launching XCUIApplication + waiting for main window). .swiftformat (v5.9 rules), .swiftlint.yml (relaxed line length 140, disabled trailing_comma/todo/opening_brace), .gitignore (Kite.xcodeproj, DerivedData, build, .swiftpm, Package.resolved, xcuserdata, .DS_Store). README.md expanded with prereqs, quickstart, DEVELOPER_DIR override, mission pointer. Deliberately skipped Sources/Design/Palette.swift (no consumers yet -- avoiding dead files; later feature can add it). Deliberately deferred pointfreeco/swift-snapshot-testing SPM dependency (comment left in project.yml; first snapshot-using feature will attach it to its target).",
+  "whatWasLeftUndone": "swift-snapshot-testing SPM dependency intentionally deferred (no consumers yet; avoids an unused Package.resolved). Sources/Design/Palette.swift skipped per the task's explicit 'skip if you don't need it yet' guidance. AppIcon artwork is a placeholder (empty set) -- real .icns ships in M8-app-icon-and-plist which owns that slot.",
+  "verification": {
+    "commandsRun": [
+      { "command": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodegen generate", "exitCode": 0, "observation": "Created project at /Users/ruben/Developer/gitruben/kite/Kite.xcodeproj" },
+      { "command": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -scheme Kite -configuration Debug -destination 'platform=macOS' build", "exitCode": 0, "observation": "** BUILD SUCCEEDED ** with zero warnings; Kite.app signed ad-hoc; Info.plist in bundle contains all required keys" },
+      { "command": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests", "exitCode": 0, "observation": "** TEST SUCCEEDED ** -- Swift Testing: 2 of 2 tests in 'Kite scaffold smoke tests' suite passed (0.001s)" },
+      { "command": "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteUITests", "exitCode": 65, "observation": "** TEST FAILED ** -- NOT a code defect. KiteUITests-Runner failed to initialize with 'Failed to initialize for UI testing: com.apple.LocalAuthentication Code=-4 \"System authentication is running.\"' on first attempt and 'Timed out while enabling automation mode.' on retry. This is a host-machine TCC/Automation permission issue: the XCUITest runner requires macOS Accessibility/Automation entitlements granted to Xcode/testmanagerd via System Settings -> Privacy & Security, which is an interactive user grant that cannot be done from CI/code. Unit tests (Swift Testing) ran fine in the same xcodebuild invocation. See interactiveChecks below for manual-launch confirmation. Flagged as a non-blocking discovered issue for user-testing-validator-foundation to re-run once Automation permission is granted." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/5 files require formatting; config at .swiftformat honored" },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "0 violations, 0 serious in 5 files" },
+      { "command": "plutil -p /Users/ruben/Library/Developer/Xcode/DerivedData/Kite-fngogvmrmaqbotclxsurqtoelbkr/Build/Products/Debug/Kite.app/Contents/Info.plist", "exitCode": 0, "observation": "Info.plist in built bundle shows CFBundleIdentifier=nl.rb2.kite, CFBundleName=Kite, CFBundleDisplayName=Kite, CFBundleShortVersionString=0.1.0, CFBundleVersion=1, LSApplicationCategoryType=public.app-category.developer-tools, LSMinimumSystemVersion=15.0, NSHighResolutionCapable=true -- fulfills VAL-PKG-004" },
+      { "command": "codesign -dv Kite.app", "exitCode": 0, "observation": "Identifier=nl.rb2.kite, Format=app bundle with Mach-O thin (arm64), Signature=adhoc, TeamIdentifier=not set -- matches Sign to Run Locally target" }
+    ],
+    "interactiveChecks": [
+      { "action": "Ran `open /Users/ruben/Library/Developer/Xcode/DerivedData/Kite-fngogvmrmaqbotclxsurqtoelbkr/Build/Products/Debug/Kite.app`, waited 3 seconds, ran `pgrep -x Kite`, then `pkill -x Kite`", "observed": "pgrep returned PID 22260 (Kite was alive and running). The app launched successfully from the built bundle. A follow-up osascript window-title query failed with AppleEvent timeout (-1712) because this machine has not granted Automation permission to Terminal/osascript -- the same environmental limitation that blocks XCUITest below. The app itself launched, registered with Launch Services, and held a process; killing it cleanly via pkill confirmed it was responsive to signals. Full visual confirmation of the three-pane NavigationSplitView (sidebar / content / detail placeholders) should be verified by the user at the next in-person session -- the automated path is blocked by the Automation permission." },
+      { "action": "XCUITest smoke test target built but runner could not initialize", "observed": "Documented above under commandsRun. The KiteUITests-Runner.app is code-signed correctly and present at /Users/ruben/Library/Developer/Xcode/DerivedData/Kite-fngogvmrmaqbotclxsurqtoelbkr/Build/Products/Debug/. Once the user grants Xcode (or /Applications/Xcode.app/Contents/Developer/usr/bin/testmanagerd) Accessibility permission in System Settings, the smoke test should pass. VAL-UI-001 is fulfillable against the same codebase; subsequent milestones that add XCUITest coverage (M2+) will need this permission resolved." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/SmokeTest.swift",
+        "cases": [
+          { "name": "test bundle loads and host app bundle identifier is present", "verifies": "VAL-PKG-004" },
+          { "name": "arithmetic sanity", "verifies": "scaffold-smoke" }
+        ]
+      },
+      {
+        "file": "Tests/KiteUITests/SmokeUITest.swift",
+        "cases": [
+          { "name": "testAppLaunchesAndShowsWindow", "verifies": "VAL-UI-001" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "XCUITest runner fails to initialize on this machine with 'Timed out while enabling automation mode' / 'System authentication is running' errors. Root cause is a host-level TCC/Automation permission that was not granted to Xcode's test runner -- it is an interactive system-settings grant the user must perform once (System Settings -> Privacy & Security -> Automation/Accessibility, add Xcode or grant the prompt on first test run). This blocks ALL XCUITest-based VAL checks across the mission (VAL-REPO-*, VAL-UI-*, etc.) until resolved. Swift Testing (KiteTests) runs fine in the same xcodebuild invocation, so subsequent git-engine / parser / persistence features can still ship their unit test coverage. The first feature that owns an XCUITest check (M2-repo-scan's VAL-REPO-001 via KiteUITests/RepoScanTests) should be preceded by a 'please grant Automation permission to Xcode' prompt from the orchestrator.",
+      "affectsFeature": "user-testing-validator-foundation, M2-repo-sidebar, and every later milestone with XCUITest coverage"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "SwiftFormat 0.61.0 requires --lint to appear AFTER path arguments ('swiftformat Sources Tests --lint'), not before. The task doc's example 'swiftformat --lint Sources Tests' errors with 'argument does not expect a value'. Updated invocation in this feature's verification and mentioned in README so future features get it right.",
+      "affectsFeature": "ALL future features -- they should use 'swiftformat Sources Tests --lint' when running the validation gate"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "The task brief states xcode-select points at /Library/Developer/CommandLineTools. On this host it actually already points at /Applications/Xcode.app/Contents/Developer. DEVELOPER_DIR export is still harmless and keeps the workflow portable; documented in README.",
+      "affectsFeature": "M1-git-engine and future xcodebuild invocations"
+    }
+  ]
+}

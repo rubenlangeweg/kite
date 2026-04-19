@@ -1,0 +1,16 @@
+# SwiftFormat configuration for Kite
+--swiftversion 5.9
+--indent 4
+--allman false
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+--trimwhitespace always
+--commas inline
+--semicolons never
+--self remove
+--importgrouping testable-bottom
+--hexliteralcase lowercase
+--maxwidth 140
+--exclude .build,build,DerivedData,.swiftpm,Kite.xcodeproj

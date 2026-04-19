@@ -1,1 +1,49 @@
-# kite
+# Kite
+
+Native macOS SwiftUI git client to replace GitKraken for daily basic-flow work
+(fetch, pull, push, create branch, checkout) across repos under `~/Developer`.
+
+Target: macOS 15+, Xcode 16+, Swift 5.9+.
+
+## Prereqs
+
+```bash
+brew install xcodegen swiftformat swiftlint
+```
+
+You also need Xcode 16+ installed at `/Applications/Xcode.app` and Apple's
+Command Line Tools (for `git`).
+
+## Quickstart
+
+```bash
+xcodegen generate
+open Kite.xcodeproj
+# ⌘R to run, ⌘U to run tests
+```
+
+The `Kite.xcodeproj` bundle is generated from `project.yml` — do not edit it by
+hand. Any build-setting change goes through `project.yml` followed by
+`xcodegen generate`.
+
+## Command-line build & test
+
+`xcode-select` on this machine may point at the Command Line Tools rather than
+Xcode.app. Every `xcodebuild` invocation must set `DEVELOPER_DIR` explicitly:
+
+```bash
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+xcodebuild -scheme Kite -configuration Debug build
+xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug
+swiftformat --lint Sources Tests
+swiftlint --strict
+```
+
+Do NOT run `sudo xcode-select -s …`; use the env var per-invocation.
+
+## Mission context
+
+This project is executed by Claude Code agents following the mission package
+under [`.factory/missions/kite-v1/`](.factory/missions/kite-v1/mission.md).
+Workers must read `AGENTS.md` and `INTERFACES.md` in that directory before
+touching any file.

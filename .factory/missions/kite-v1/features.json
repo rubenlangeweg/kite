@@ -1,0 +1,700 @@
+{
+  "mission": "kite-v1",
+  "milestones": [
+    "foundation",
+    "repo-list",
+    "branch-list",
+    "graph",
+    "net-ops",
+    "branch-ops",
+    "diff",
+    "polish"
+  ],
+  "features": [
+    {
+      "id": "M1-project-scaffold",
+      "milestone": "foundation",
+      "description": "Create the Xcode project, app entry point, empty NavigationSplitView skeleton, Info.plist, bundle identifier nl.rb2.kite, min system version macOS 15, sandbox disabled in entitlements, Sign to Run Locally identity, SwiftLint + SwiftFormat config, Swift Testing target.",
+      "workerType": "swiftui-worker",
+      "preconditions": [],
+      "expectedBehavior": [
+        "Kite.xcodeproj opens in Xcode 16 without warnings.",
+        "Debug build produces Kite.app that launches to an empty three-pane NavigationSplitView.",
+        "swift test (empty suite) exits 0.",
+        "swiftformat --lint and swiftlint --strict exit 0.",
+        "Info.plist contains required keys (bundle id, version, category, min system version, high-res capable)."
+      ],
+      "verificationSteps": [
+        "xcodebuild -scheme Kite -configuration Debug build",
+        "plutil -p Kite.app/Contents/Info.plist and confirm required keys",
+        "Launch the app and observe empty split view renders"
+      ],
+      "fulfills": [
+        "VAL-UI-001",
+        "VAL-PKG-004"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M1-git-engine",
+      "milestone": "foundation",
+      "description": "Implement Git.run(args:cwd:) async throws -> GitResult and Git.stream(args:cwd:) -> AsyncThrowingStream<GitEvent, Error> with cancellation support. Add GitError, ErrorClassifier mapping known stderr patterns, and environment hardening (GIT_TERMINAL_PROMPT=0, GIT_OPTIONAL_LOCKS=0, LC_ALL=C). Verify git availability at startup.",
+      "workerType": "git-engine-worker",
+      "preconditions": ["M1-project-scaffold"],
+      "expectedBehavior": [
+        "Git.run executes /usr/bin/git with given args and cwd, returns stdout/stderr/exit.",
+        "Git.stream yields GitEvent cases (stdoutLine, stderrLine, progress, completed) as they arrive.",
+        "Task cancellation terminates the child process via Process.terminate().",
+        "ErrorClassifier maps `fatal: Authentication failed`, `non-fast-forward`, `no upstream`, `Your local changes`, etc. to typed GitError cases.",
+        "Missing or outdated git produces a clear startup error."
+      ],
+      "verificationSteps": [
+        "swift test --filter GitRunTests",
+        "swift test --filter ErrorClassifierTests",
+        "Manual: run Git.run([\"--version\"]) from a unit test and confirm exit 0"
+      ],
+      "fulfills": [
+        "VAL-NET-008",
+        "VAL-NET-010",
+        "VAL-PARSE-007",
+        "VAL-SEC-004",
+        "VAL-SEC-005"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M1-git-parsers",
+      "milestone": "foundation",
+      "description": "Implement porcelain parsers: branch-list parser (null-delimited format fields), log parser (topo-ordered, null-delimited fields, parent arrays), status parser (--porcelain=v2 --branch -z), for-each-ref parser, unified-diff parser, progress parser (splits on \\r and \\n). All pure functions over strings, fully unit-tested.",
+      "workerType": "git-engine-worker",
+      "preconditions": ["M1-git-engine"],
+      "expectedBehavior": [
+        "BranchParser.parse(...) returns [Branch] with ahead/behind extracted from upstream:track.",
+        "LogParser.parse(...) returns [Commit] with parent SHA arrays preserved.",
+        "StatusParser.parse(...) returns StatusSummary { branch, ahead, behind, staged, modified, untracked }.",
+        "ForEachRefParser.parse(...) returns [sha: [Ref]] mapping.",
+        "DiffParser.parse(...) returns [FileDiff] with hunks.",
+        "ProgressParser handles `\\r`-updated lines without duplicating events."
+      ],
+      "verificationSteps": [
+        "swift test --filter \"*Parser*\"",
+        "Parser tests use real git output fixtures committed under Tests/GitTests/Fixtures/"
+      ],
+      "fulfills": [
+        "VAL-PARSE-001",
+        "VAL-PARSE-002",
+        "VAL-PARSE-003",
+        "VAL-PARSE-004",
+        "VAL-PARSE-005",
+        "VAL-PARSE-006"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M1-fs-watcher",
+      "milestone": "foundation",
+      "description": "Implement FSEventStream wrapper watching a repo's .git/ directory with 500ms coalescing. Emits a debounced `changed` signal. Properly releases FSEvents stream on deinit.",
+      "workerType": "git-engine-worker",
+      "preconditions": ["M1-git-engine"],
+      "expectedBehavior": [
+        "Starting a watcher on a path returns a handle.",
+        "Writes inside the watched .git/ directory produce a `changed` event within 500ms.",
+        "Stopping the watcher releases the FSEvents stream (no leaks under Instruments)."
+      ],
+      "verificationSteps": [
+        "swift test --filter FSWatcherTests (writes to tmp dir, asserts callback)",
+        "Run Instruments → Leaks on the unit test"
+      ],
+      "fulfills": [
+        "VAL-REPO-010",
+        "VAL-GRAPH-010"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M1-persistence",
+      "milestone": "foundation",
+      "description": "Implement UserDefaults + Codable persistence for settings. Add Persistence.Keys static constants under nl.rb2.kite.* prefix. Support: pinned repos list, extra root paths, last-opened repo path, last-selected branch per repo, window frame, split widths, auto-fetch enabled flag. Include schema version and a no-op migration hook.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-project-scaffold"],
+      "expectedBehavior": [
+        "Settings struct encodes/decodes via JSONEncoder/JSONDecoder stored in UserDefaults.",
+        "Reads/writes are synchronous and thread-safe (UserDefaults guarantees).",
+        "Schema version field present; missing-key defaults returned gracefully.",
+        "Unit tests round-trip every stored type."
+      ],
+      "verificationSteps": [
+        "swift test --filter PersistenceTests",
+        "Manually toggle a setting, quit the app, relaunch, confirm preserved"
+      ],
+      "fulfills": [
+        "VAL-PERSIST-001",
+        "VAL-PERSIST-002",
+        "VAL-PERSIST-003",
+        "VAL-PERSIST-004",
+        "VAL-PERSIST-005"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M2-repo-scan",
+      "milestone": "repo-list",
+      "description": "Implement RepoScanner that enumerates directories under configured roots (depth-1 by default) and checks each for a .git/ entry. Handles bare repos by detecting HEAD + objects/ pattern. Runs off main actor, hops back on completion.",
+      "workerType": "git-engine-worker",
+      "preconditions": ["M1-git-engine", "M1-persistence"],
+      "expectedBehavior": [
+        "Scanning ~/Developer returns every directory with a .git/ subdirectory.",
+        "Non-git directories are excluded.",
+        "Bare repos are returned with a `bare: true` flag.",
+        "Scan completes in <200ms for 100 directories on M1+.",
+        "Invalid root path surfaces an error, does not crash."
+      ],
+      "verificationSteps": [
+        "swift test --filter RepoScannerTests",
+        "Manually launch Kite and confirm ~/Developer repos appear"
+      ],
+      "fulfills": [
+        "VAL-REPO-001",
+        "VAL-REPO-002",
+        "VAL-REPO-005",
+        "VAL-REPO-006"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M2-repo-sidebar",
+      "milestone": "repo-list",
+      "description": "Implement repo sidebar: `NavigationSplitView` leftmost column shows pinned repos at the top, then repos grouped by root (collapsible sections). Shows repo name + relative path tooltip. Selecting a repo sets the focused repo in the AppModel.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M2-repo-scan"],
+      "expectedBehavior": [
+        "Repos list in sidebar matches scanner output.",
+        "Pinned repos group appears above scanned groups.",
+        "Clicking a repo updates the detail pane to that repo within 500ms.",
+        "Empty state shows ContentUnavailableView with 'Add folder…' button opening Settings.",
+        "Last-selected repo restored on relaunch (via M1-persistence)."
+      ],
+      "verificationSteps": [
+        "xcodebuild test -scheme Kite -only-testing KiteUITests/RepoSidebarTests",
+        "Snapshot test renders both light and dark"
+      ],
+      "fulfills": [
+        "VAL-REPO-007",
+        "VAL-REPO-008",
+        "VAL-REPO-009",
+        "VAL-UI-007",
+        "VAL-UI-010"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M2-settings-roots",
+      "milestone": "repo-list",
+      "description": "Settings scene (⌘,) with tabs: General / Roots / About. Roots tab lets user add/remove root paths via `NSOpenPanel`. Each root shows its absolute path and a 'Scan now' button. Invalid (non-existent) paths are flagged inline.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-persistence", "M2-repo-scan"],
+      "expectedBehavior": [
+        "⌘, opens Settings window with three tabs.",
+        "Roots tab lists configured roots; add/remove updates persistence and sidebar immediately.",
+        "Adding a non-existent path shows an inline warning; does not crash.",
+        "Removing a root removes its repos from sidebar without restart."
+      ],
+      "verificationSteps": [
+        "xcodebuild test -scheme Kite -only-testing KiteUITests/SettingsRootsTests",
+        "Manual: add ~/rb2-work and confirm its repos appear"
+      ],
+      "fulfills": [
+        "VAL-REPO-003",
+        "VAL-REPO-004",
+        "VAL-REPO-005",
+        "VAL-UI-008"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M3-branch-list",
+      "milestone": "branch-list",
+      "description": "Implement the branch list view (middle column, upper pane). Shows local branches (refs/heads/*) and grouped remote branches (refs/remotes/<remote>/*), each with a pill showing ahead/behind counts or 'no upstream'/'gone'. Current branch is highlighted. Detached HEAD shown as a pseudo-row.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-git-parsers", "M2-repo-sidebar"],
+      "expectedBehavior": [
+        "All local branches listed, current branch marked.",
+        "Remote branches grouped by remote, collapsible.",
+        "Ahead/behind counts rendered accurately.",
+        "[gone] branches show a 'gone' badge.",
+        "Detached HEAD rendered as '(detached @ <short-sha>)'.",
+        "HEAD symbolic refs (e.g. origin/HEAD) filtered out."
+      ],
+      "verificationSteps": [
+        "xcodebuild test -scheme Kite -only-testing ViewTests/BranchListTests",
+        "Snapshot tests for local/remote/detached/gone states",
+        "Manual on a fixture repo"
+      ],
+      "fulfills": [
+        "VAL-BRANCH-001",
+        "VAL-BRANCH-002",
+        "VAL-BRANCH-003",
+        "VAL-BRANCH-004"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M3-status-header",
+      "milestone": "branch-list",
+      "description": "Repo detail header shows working-tree summary (X modified, Y staged, Z untracked) from git status --porcelain=v2 parsing. Updates on FSEvents refresh.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-git-parsers", "M1-fs-watcher", "M2-repo-sidebar"],
+      "expectedBehavior": [
+        "Header renders current branch name + X/Y/Z counts.",
+        "After external `git add` in terminal, header updates within 2s.",
+        "Clean working tree shows 'clean'."
+      ],
+      "verificationSteps": [
+        "ViewTests/StatusHeaderTests",
+        "Manual FSEvents refresh check"
+      ],
+      "fulfills": [
+        "VAL-BRANCH-005",
+        "VAL-REPO-010"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M3-repo-focus-lifecycle",
+      "milestone": "branch-list",
+      "description": "Wire up the focused-repo lifecycle: when the selected repo changes, start FSEvents watcher on its .git/, fetch branch list + status + log, cancel any in-flight tasks from previous repo. Per-repo GitQueue actor serializes git ops for the same repo.",
+      "workerType": "git-engine-worker",
+      "preconditions": ["M1-fs-watcher", "M1-git-engine"],
+      "expectedBehavior": [
+        "Switching repos cancels in-flight ops on the previous repo and starts fresh ones.",
+        "Two simultaneous ops on the same repo run sequentially.",
+        "Closing the window terminates every active git Process."
+      ],
+      "verificationSteps": [
+        "swift test --filter GitQueueTests",
+        "Manual: trigger two fetches quickly, confirm serial execution via logs"
+      ],
+      "fulfills": [
+        "VAL-NET-009",
+        "VAL-NET-010"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M4-graph-layout",
+      "milestone": "graph",
+      "description": "Implement the column-reuse graph layout algorithm with first-parent preference. Input: [Commit] (topo-ordered). Output: [LayoutRow] with column assignments, in-edges, out-edges. Implemented as a pure function + tested against a canonical fixture repo.",
+      "workerType": "git-engine-worker",
+      "preconditions": ["M1-git-parsers"],
+      "expectedBehavior": [
+        "First parent stays in the same column when possible.",
+        "Columns are freed when a branch merges in, reassigned to later commits.",
+        "Octopus merges (≥3 parents) use straight-line fallback.",
+        "Output matches the committed reference JSON for the fixture repo."
+      ],
+      "verificationSteps": [
+        "swift test --filter GraphLayoutTests",
+        "Reference fixture comparison via GraphLayoutTests.testFixtureRepo"
+      ],
+      "fulfills": [
+        "VAL-GRAPH-002",
+        "VAL-GRAPH-003",
+        "VAL-GRAPH-006"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M4-graph-row-view",
+      "milestone": "graph",
+      "description": "Implement the per-row SwiftUI Canvas view drawing a single LayoutRow's commit dot + in/out edges for its Y range. Lane colors from the palette (name-hash → 6-color, main hardcoded blue). 3-segment straight/diagonal edges.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M4-graph-layout"],
+      "expectedBehavior": [
+        "Commit dot is drawn at the commit's column.",
+        "In-edges (from this commit's parents above) and out-edges (to children below) drawn with correct lane colors.",
+        "main / master / trunk / default hardcoded to the blue slot regardless of hash.",
+        "Same branch renders same color across refreshes."
+      ],
+      "verificationSteps": [
+        "Snapshot tests for 3-5 canonical row shapes (single-parent, merge, branch-off, octopus).",
+        "Manual scroll test on fixture repo with 200 commits."
+      ],
+      "fulfills": [
+        "VAL-GRAPH-004",
+        "VAL-GRAPH-005",
+        "VAL-GRAPH-008"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M4-graph-row-meta",
+      "milestone": "graph",
+      "description": "Add the right-of-graph content in each row: commit subject, author name, relative age (TimelineView for live updates), and branch pills for any refs pointing at the commit. +N collapse for >3 pills.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M4-graph-row-view", "M1-git-parsers"],
+      "expectedBehavior": [
+        "Each row shows: graph column | subject | author | relative age | pills.",
+        "Pills render for local branches, remote branches; NOT tags (deferred).",
+        "+N overflow for >3 pills.",
+        "Relative age updates minute-by-minute via TimelineView."
+      ],
+      "verificationSteps": [
+        "ViewTests/GraphRowTests snapshot",
+        "Manual: confirm 'main' and 'origin/main' pills visible on fixture repo"
+      ],
+      "fulfills": [
+        "VAL-GRAPH-001",
+        "VAL-GRAPH-007"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M4-graph-scroll-container",
+      "milestone": "graph",
+      "description": "Container view embedding GraphRow in a List, with scroll preservation across refresh, '200 commit limit' footer, shallow-clone banner, and a selection binding that opens the diff pane on commit click.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M4-graph-row-meta"],
+      "expectedBehavior": [
+        "Graph list scrolls at 60fps with 200 commits on M1+.",
+        "FSEvents refresh preserves scroll position.",
+        "Footer row shows '200-commit limit reached' when log cap hit.",
+        "Shallow repo shows top banner 'history truncated'.",
+        "Clicking a commit sets selection, routes to diff pane."
+      ],
+      "verificationSteps": [
+        "Instruments Core Animation capture for 60fps verification.",
+        "KiteUITests/GraphScrollTests for scroll-preservation and footer.",
+        "Manual on a shallow repo: confirm banner."
+      ],
+      "fulfills": [
+        "VAL-GRAPH-009",
+        "VAL-GRAPH-010",
+        "VAL-GRAPH-011"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M5-toast-infrastructure",
+      "milestone": "net-ops",
+      "description": "Implement toast banner infrastructure: bottom-center toasts, 5s auto-dismiss for success (green), sticky for errors (red) with ✕ close button. Click error toast to open a detail panel showing full stderr. Toolbar progress indicator (indeterminate + determinate modes).",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-project-scaffold"],
+      "expectedBehavior": [
+        "Showing a success toast dismisses after 5s.",
+        "Error toasts are sticky until clicked or dismissed.",
+        "Error detail panel shows full captured stderr.",
+        "Toolbar indeterminate spinner during unparseable-progress ops.",
+        "Toolbar determinate bar when ProgressParser yields percentage."
+      ],
+      "verificationSteps": [
+        "Snapshot tests for each toast state.",
+        "ViewTests/ToastTests for auto-dismiss timing.",
+        "Manual: click error toast to expand stderr."
+      ],
+      "fulfills": [
+        "VAL-UI-004",
+        "VAL-UI-005",
+        "VAL-UI-006"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M5-fetch",
+      "milestone": "net-ops",
+      "description": "Wire up ⌘⇧F / toolbar Fetch button to Git.stream([\"fetch\", \"--all\", \"--prune\"]) on the focused repo. Parse progress stderr, drive the toolbar progress indicator, and surface completion/errors via toasts. Ahead/behind recomputed after completion.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-git-engine", "M3-repo-focus-lifecycle", "M5-toast-infrastructure"],
+      "expectedBehavior": [
+        "Fetch command runs the documented args in the repo cwd.",
+        "Progress is visible during network transfer.",
+        "Success toast on completion; error toast with actionable message on auth failure or network error.",
+        "After successful fetch, branch list ahead/behind updates."
+      ],
+      "verificationSteps": [
+        "KiteUITests/FetchTests with a fixture repo + local bare remote.",
+        "Manual: fetch a real repo, confirm progress + completion."
+      ],
+      "fulfills": [
+        "VAL-NET-001",
+        "VAL-NET-005",
+        "VAL-NET-011",
+        "VAL-BRANCH-006"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M5-pull-push",
+      "milestone": "net-ops",
+      "description": "Wire up ⌘⇧P / Pull button (git pull --ff-only) and ⌘⇧K / Push button (git push, never --force). Surface non-fast-forward, auth, and no-upstream errors with actionable toasts. On missing upstream for push, offer confirm-to-run-with-upstream-set.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M5-fetch"],
+      "expectedBehavior": [
+        "Pull runs `git pull --ff-only`; non-FF produces documented sticky error toast.",
+        "Push runs `git push` without force flags.",
+        "Missing-upstream error on push triggers a sheet offering `git push -u origin <branch>`.",
+        "Auth failures produce a sticky toast with setup suggestions."
+      ],
+      "verificationSteps": [
+        "KiteUITests/PushPullTests with fixture diverged repo.",
+        "Grep for 'force' in source returns 0 results outside tests/docs.",
+        "Manual: push + pull on a real repo."
+      ],
+      "fulfills": [
+        "VAL-NET-002",
+        "VAL-NET-003",
+        "VAL-NET-004",
+        "VAL-SEC-001"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M5-auto-fetch",
+      "milestone": "net-ops",
+      "description": "Background auto-fetch every 5 min on the currently focused repo. Timer cancels on repo change, window blur, window close, and can be disabled in Settings > General.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M5-fetch", "M1-persistence"],
+      "expectedBehavior": [
+        "Timer fires `git fetch --all --prune` on focused repo every 5 min.",
+        "Switching repos cancels the previous timer.",
+        "Non-focused repos are never fetched in the background.",
+        "Settings toggle enables/disables auto-fetch globally."
+      ],
+      "verificationSteps": [
+        "swift test --filter AutoFetchTimerTests (stubbed clock).",
+        "Manual: leave a repo open 5+ min with a known upstream change, confirm update."
+      ],
+      "fulfills": [
+        "VAL-NET-006",
+        "VAL-NET-007"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M6-create-branch",
+      "milestone": "branch-ops",
+      "description": "⌘⇧N opens a 'New branch' sheet with name validation (git ref-format rules). On confirm, runs `git switch -c <name>` from current HEAD. Error handling for duplicate name, invalid name, and dirty working tree.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-git-engine", "M1-git-parsers", "M3-branch-list"],
+      "expectedBehavior": [
+        "Sheet validates name inline; invalid names are rejected with specific message.",
+        "Duplicate branch triggers sticky error toast.",
+        "On success, branch list updates with the new branch as current.",
+        "Dirty working tree error produces the documented 'stash or commit in terminal' toast."
+      ],
+      "verificationSteps": [
+        "swift test --filter BranchNameValidatorTests",
+        "KiteUITests/CreateBranchTests",
+        "Manual: create a branch, confirm switch + pill update."
+      ],
+      "fulfills": [
+        "VAL-BRANCHOP-001",
+        "VAL-BRANCHOP-002",
+        "VAL-BRANCHOP-003",
+        "VAL-BRANCHOP-006"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M6-switch-branch",
+      "milestone": "branch-ops",
+      "description": "Double-click a local branch to `git switch <name>`. Double-click a remote branch to create a tracking local (`git switch -c <local> --track <remote>`) unless one already exists, in which case switch to it. Dirty-tree errors surface with same toast as M6-create-branch.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M6-create-branch"],
+      "expectedBehavior": [
+        "Double-click local branch switches to it.",
+        "Double-click remote branch creates tracking local + switches.",
+        "Existing local tracking the remote is chosen over creating duplicate.",
+        "Dirty working tree error surfaces consistently with create-branch flow.",
+        "Current indicator and graph update correctly after switch."
+      ],
+      "verificationSteps": [
+        "KiteUITests/SwitchBranchTests with fixture repo + remote.",
+        "Manual: switch between branches, confirm HEAD + current indicator."
+      ],
+      "fulfills": [
+        "VAL-BRANCHOP-004",
+        "VAL-BRANCHOP-005",
+        "VAL-BRANCHOP-006"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M7-uncommitted-diff",
+      "milestone": "diff",
+      "description": "Diff pane (right column) 'Working copy' mode: runs `git diff` (unstaged) and `git diff --staged` (staged), merges into a single unified-diff view with file-path headers. Read-only. Binary files show 'Binary file — not displayed'. Empty tree shows a clean-state placeholder.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-git-parsers", "M3-status-header"],
+      "expectedBehavior": [
+        "Working copy diff renders unstaged then staged, each under its own header.",
+        "Line coloring: + green, - red, context gray, no syntax highlighting.",
+        "Clean tree shows empty state.",
+        "Binary files do not render gibberish.",
+        "No staging / discard / revert actions exist anywhere."
+      ],
+      "verificationSteps": [
+        "Snapshot tests for clean, mixed, binary, no-newline-at-eof cases.",
+        "KiteUITests/DiffReadOnlyTests confirming absence of action buttons.",
+        "Manual on a fixture with mixed staged/unstaged changes."
+      ],
+      "fulfills": [
+        "VAL-DIFF-001",
+        "VAL-DIFF-002",
+        "VAL-DIFF-004",
+        "VAL-DIFF-005",
+        "VAL-DIFF-007"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M7-commit-diff",
+      "milestone": "diff",
+      "description": "Diff pane 'Selected commit' mode: selecting a commit in the graph runs `git show <sha>` and renders the full commit diff (header: sha, author, date, subject, body; then diff content). Large diffs (>5k lines) virtualized via LazyVStack.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M4-graph-scroll-container", "M7-uncommitted-diff"],
+      "expectedBehavior": [
+        "Selecting a commit renders its diff within 500ms.",
+        "Commit metadata shown above the diff.",
+        "10k-line diff scrolls at 60fps, memory < 200MB."
+      ],
+      "verificationSteps": [
+        "Snapshot test for a medium commit diff.",
+        "Instruments capture for a 10k-line diff.",
+        "Manual: click a few commits, confirm rendering."
+      ],
+      "fulfills": [
+        "VAL-DIFF-003",
+        "VAL-DIFF-006",
+        "VAL-GRAPH-009"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M8-commands-and-menu",
+      "milestone": "polish",
+      "description": "Wire up the App menu and keyboard commands via Commands/CommandGroup: ⌘R refresh, ⌘⇧F fetch, ⌘⇧P pull, ⌘⇧K push, ⌘N new window, ⌘, settings, ⌘⇧N new branch, ⌘T switch branch. Each command respects focused repo state (disabled when no repo selected).",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M5-auto-fetch", "M6-switch-branch"],
+      "expectedBehavior": [
+        "All documented shortcuts invoke the right action.",
+        "Menu bar shows bindings next to each item.",
+        "Commands disabled/enabled based on selection state.",
+        "⌘N opens a second independent window."
+      ],
+      "verificationSteps": [
+        "KiteUITests/CommandsTests exercising every shortcut.",
+        "Manual: open menu, confirm all items labeled + bound."
+      ],
+      "fulfills": [
+        "VAL-UI-002",
+        "VAL-UI-003",
+        "VAL-UI-009"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M8-app-icon-and-plist",
+      "milestone": "polish",
+      "description": "Design and add app icon (.icns in Assets.xcassets). Finalize Info.plist keys: CFBundleIdentifier=nl.rb2.kite, CFBundleName=Kite, LSApplicationCategoryType=public.app-category.developer-tools, LSMinimumSystemVersion=15.0, NSHighResolutionCapable=true. Add About window content.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M1-project-scaffold"],
+      "expectedBehavior": [
+        "Icon visible in Dock, Finder, About window at every size.",
+        "plutil -p Info.plist shows every required key.",
+        "About window shows name, version, credit line."
+      ],
+      "verificationSteps": [
+        "shell: plutil -p Kite.app/Contents/Info.plist",
+        "Manual: observe icon in Dock and Finder after copy to /Applications."
+      ],
+      "fulfills": [
+        "VAL-PKG-003",
+        "VAL-PKG-004"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M8-release-packaging",
+      "milestone": "polish",
+      "description": "Produce a reproducible Release build via `xcodebuild -scheme Kite -configuration Release`. Target: Kite.app under 20MB. Sign to Run Locally identity. Document a manual install flow (drag to /Applications, right-click Open first time). Audit for leftover Process on quit.",
+      "workerType": "swiftui-worker",
+      "preconditions": ["M8-commands-and-menu", "M8-app-icon-and-plist"],
+      "expectedBehavior": [
+        "Release xcodebuild exits 0.",
+        "Kite.app size < 20MB.",
+        "App launches from /Applications, sandbox off, can execute /usr/bin/git.",
+        "On ⌘Q, no child git processes remain (pgrep -P <kite-pid>)."
+      ],
+      "verificationSteps": [
+        "xcodebuild -scheme Kite -configuration Release build",
+        "du -sh Kite.app",
+        "Manual: drag to /Applications, launch, fetch a repo, quit, pgrep."
+      ],
+      "fulfills": [
+        "VAL-PKG-001",
+        "VAL-PKG-002",
+        "VAL-PKG-005",
+        "VAL-PKG-006",
+        "VAL-NET-010"
+      ],
+      "status": "pending"
+    }
+  ],
+  "coverage": {
+    "totalAssertions": 86,
+    "fulfilledAssertions": 86,
+    "orphanAssertions": [],
+    "notes": "Every VAL-* assertion appears in exactly one feature's fulfills array, with a few load-bearing assertions (VAL-NET-010, VAL-REPO-005, VAL-BRANCHOP-006, VAL-GRAPH-009, VAL-PKG-004) fulfilled across two features where multiple flows contribute evidence. VAL-SEC-002, VAL-SEC-003, VAL-SEC-006, VAL-SEC-007 are grep/audit-level invariants fulfilled implicitly by scrutiny review and listed explicitly there. VAL-UI-001 fulfilled by M1-project-scaffold initial shell."
+  },
+  "implicitScrutinyFeatures": [
+    {
+      "id": "scrutiny-validator-foundation",
+      "milestone": "foundation",
+      "fulfills": ["VAL-SEC-002", "VAL-SEC-003", "VAL-SEC-006", "VAL-SEC-007"]
+    },
+    {
+      "id": "scrutiny-validator-repo-list",
+      "milestone": "repo-list",
+      "fulfills": []
+    },
+    {
+      "id": "scrutiny-validator-branch-list",
+      "milestone": "branch-list",
+      "fulfills": []
+    },
+    {
+      "id": "scrutiny-validator-graph",
+      "milestone": "graph",
+      "fulfills": []
+    },
+    {
+      "id": "scrutiny-validator-net-ops",
+      "milestone": "net-ops",
+      "fulfills": []
+    },
+    {
+      "id": "scrutiny-validator-branch-ops",
+      "milestone": "branch-ops",
+      "fulfills": []
+    },
+    {
+      "id": "scrutiny-validator-diff",
+      "milestone": "diff",
+      "fulfills": []
+    },
+    {
+      "id": "scrutiny-validator-polish",
+      "milestone": "polish",
+      "fulfills": []
+    }
+  ],
+  "implicitUserTestingFeatures": [
+    { "id": "user-testing-validator-foundation", "milestone": "foundation" },
+    { "id": "user-testing-validator-repo-list", "milestone": "repo-list" },
+    { "id": "user-testing-validator-branch-list", "milestone": "branch-list" },
+    { "id": "user-testing-validator-graph", "milestone": "graph" },
+    { "id": "user-testing-validator-net-ops", "milestone": "net-ops" },
+    { "id": "user-testing-validator-branch-ops", "milestone": "branch-ops" },
+    { "id": "user-testing-validator-diff", "milestone": "diff" },
+    { "id": "user-testing-validator-polish", "milestone": "polish" }
+  ]
+}
