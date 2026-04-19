@@ -1,0 +1,59 @@
+{
+  "featureId": "M3-repo-focus-lifecycle",
+  "salientSummary": "Added GitQueue (actor-based per-repo op serializer with explicit gate-chain serialization across suspensions), RepoFocus (@Observable @MainActor coordinator with a fresh FSWatcher per work-tree repo, graceful skip for bare repos, ARC/deinit-driven shutdown), and RepoStore (@Observable @MainActor focus owner wired into KiteApp environment). RepoSidebarModel.select() now forwards to RepoStore.focus(on:) when a RepoStore is injected; kept nullable to preserve existing test ergonomics. 11 new tests (3 GitQueue, 4 RepoFocus, 4 RepoStore) + 1 extension of RepoSidebarModelTests; 110 KiteTests pass total. VAL-NET-009 and VAL-NET-010 fulfilled.",
+  "whatWasImplemented": "Sources/Repo/GitQueue.swift — actor GitQueue(repoURL:) with nonisolated let repoURL and run<T: Sendable>(_ body) async throws -> T. The trivial `try await body()` implementation suggested in the feature brief does NOT serialize across suspension points (Swift actor reentrancy lets the next mail message run while the current body is awaiting). We chain ops via a CompletionGate reference: each `run` installs a new gate as `latestGate`, awaits the prior gate before calling body, and fires its own gate in a `defer`. Throws/cancellation bubble out unchanged; the defer ensures the chain never deadlocks on a failing op.\n\nSources/Repo/RepoFocus.swift — @Observable @MainActor final class holding `let repo`, `let queue: GitQueue`, `private(set) var lastChangeAt: Date`, private `watcher: FSWatcher?`, and `rootTask: Task<Void, Never>?`. In init, for work-tree repos builds an FSWatcher on `repo.url/.git/` with a `[weak self]` callback that bumps `lastChangeAt = .init()` (guard on isShutDown). Bare repos skip watcher construction entirely. FSWatcher.start() failures are logged via Logger(subsystem: \"nl.rb2.kite\", category: \"repo\") and proceed without auto-refresh. `shutdown()` is idempotent (cancel rootTask, watcher.stop(), nil out); `deinit` calls the same teardown inline (safe from any thread: watcher.stop() is documented thread-safe, Task.cancel() is Sendable).\n\nSources/ViewModels/RepoStore.swift — @Observable @MainActor final class with `private(set) var focus: RepoFocus?` and `focus(on: DiscoveredRepo?)`. Explicitly calls the previous focus's `shutdown()` before releasing the reference (so teardown lands on the main actor instead of at ARC's disposal). Writes `persistence.setLastOpenedRepo(...)` on every swap including nil.\n\nSources/ViewModels/RepoSidebarModel.swift — added optional `repoStore: RepoStore?` parameter to init (default nil to keep existing tests valid). `select(_:)` now calls `repoStore?.focus(on: repo)` in addition to its existing persistence write, so the focus lifecycle starts the moment the user clicks in the sidebar. Persistence write kept unconditional so the sidebar model remains self-sufficient when no RepoStore is wired (legacy tests, future configurations).\n\nSources/App/KiteApp.swift — constructs the trio `persistence` → `repoStore = RepoStore(persistence: store)` → `sidebarModel = RepoSidebarModel(persistence:, repoStore:, rootsOverride:)`. Injects `repoStore` alongside persistence and sidebarModel into the WindowGroup and Settings scenes via `.environment(...)`.\n\nTests/KiteTests/RepoTests/GitQueueTests.swift — 3 Swift Testing cases: (1) `serializesConcurrentOps` holds op1 inside the queue via an AsyncSignal barrier while enqueueing ops 2+3 with a tiny stagger; release op1 and assert completion order is [1,2,3] — proves mail-ordered serialization even across the suspension point. (2) `cancellationPropagates` cancels the outer Task mid-body and asserts CancellationError propagates. (3) `exceptionsBubbleOut` asserts a thrown FakeError rethrows unchanged.\n\nTests/KiteTests/RepoTests/RepoFocusTests.swift — 4 Swift Testing cases under @MainActor: (1) `createsWatcherForWorkTree` creates a fixture repo, writes into .git/, and asserts lastChangeAt advances within 2s. (2) `bareRepoSkipsWatcher` uses `git init --bare`, verifies instantiation and that lastChangeAt stays put after writes. (3) `shutdownReleasesWatcher` shuts down then writes and asserts lastChangeAt doesn't advance. (4) `deinitShutsDown` drops the focus in a nested scope and writes afterwards — proxy assertion that no crash occurs on a dead-reference callback.\n\nTests/KiteTests/ViewModelTests/RepoStoreTests.swift — 4 Swift Testing cases under @MainActor: (1) `focusOnNilClearsState` — focus on repo then nil clears focus and persistence. (2) `focusOnRepoStartsNewRepoFocus` — assert repo identity, persisted path, and queue.repoURL. (3) `switchingReposReplacesFocus` — swap from repoA to repoB and assert distinct instances via `!==`. (4) `persistenceUpdates` — multi-step swap asserting persistence mirrors the latest focus.\n\nTests/KiteTests/ViewModelTests/RepoSidebarModelTests.swift — added `selectForwardsToRepoStore` covering the repoStore-injected path (select(repo) triggers focus(on:), select(nil) clears focus). Existing `selectWritesLastOpenedRepo` remains to cover the nil-repoStore path.\n\nAll VAL-SEC invariants preserved: no `--force`, `reset --hard`, `clean`, `stash`, `commit`, `merge`, `rebase`, or any other off-limits flag introduced. `Process` is not invoked directly — callers will compose `queue.run { try await Git.run(...) }` when the M3 UI features land.",
+  "whatWasLeftUndone": "GitQueue's gate-chain implementation deviates from the feature brief's claim that a trivial `try await body()` suffices — documented inline with the rationale (Swift actor reentrancy across suspension points does not serialize body execution). Flagged as a discoveredIssue for orchestrator review.\n\n`rootTask` is kept as infrastructure per the brief's \"include if needed, else omit\" wording. M5-fetch / M5-auto-fetch can plant timers or sidecar streams into it; it is currently unused and cancelled on shutdown.\n\nNo UI surface consumes `lastChangeAt` yet — M3-branch-list and M3-status-header will observe it for auto-refresh. The underlying signal is verified in tests; VAL-REPO-010 / VAL-BRANCH-006 coverage lives downstream.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Created project at /Users/ruben/Developer/gitruben/kite/Kite.xcodeproj" },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "** BUILD SUCCEEDED **" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests", "exitCode": 0, "observation": "Test run with 110 tests in 17 suites passed after 32.456 seconds" },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/63 files require formatting" },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Done linting! Found 0 violations, 0 serious in 63 files" }
+    ],
+    "interactiveChecks": []
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/RepoTests/GitQueueTests.swift",
+        "cases": [
+          { "name": "serializesConcurrentOps", "verifies": "VAL-NET-009" },
+          { "name": "cancellationPropagates", "verifies": "VAL-NET-010" },
+          { "name": "exceptionsBubbleOut", "verifies": "VAL-NET-009" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/RepoTests/RepoFocusTests.swift",
+        "cases": [
+          { "name": "createsWatcherForWorkTree", "verifies": "VAL-NET-009" },
+          { "name": "bareRepoSkipsWatcher", "verifies": "VAL-NET-009" },
+          { "name": "shutdownReleasesWatcher", "verifies": "VAL-NET-010" },
+          { "name": "deinitShutsDown", "verifies": "VAL-NET-010" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewModelTests/RepoStoreTests.swift",
+        "cases": [
+          { "name": "focusOnNilClearsState", "verifies": "VAL-NET-010" },
+          { "name": "focusOnRepoStartsNewRepoFocus", "verifies": "VAL-NET-009" },
+          { "name": "switchingReposReplacesFocus", "verifies": "VAL-NET-010" },
+          { "name": "persistenceUpdates", "verifies": "VAL-NET-009" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewModelTests/RepoSidebarModelTests.swift",
+        "cases": [
+          { "name": "selectForwardsToRepoStore", "verifies": "VAL-NET-009" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "The feature brief asserted that a trivial `actor GitQueue { func run(_ body:) async throws -> T { try await body() } }` would serialize reentrant calls by mail-ordering. In practice Swift actors are reentrant across `await` suspension points: when body suspends on `Task.sleep` or `Git.run`'s subprocess wait, the actor is free to accept the next `run` message and that message's body begins executing concurrently. I implemented explicit serialization via a CompletionGate chain (each `run` awaits the previous op's gate, installs its own, fires on completion) so VAL-NET-009's \"two simultaneous ops on the same repo run sequentially\" guarantee holds even for long-running Git.run bodies. No change to the call-site contract (`try await queue.run { ... }`). Flagged so INTERFACES.md / AGENTS.md can incorporate this nuance for future workers.",
+      "affectsFeature": "INTERFACES.md documentation / future features in M5-net-ops"
+    }
+  ]
+}

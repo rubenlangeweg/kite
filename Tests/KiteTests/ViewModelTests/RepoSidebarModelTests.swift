@@ -133,6 +133,47 @@ struct RepoSidebarModelTests {
         #expect(store.settings.lastOpenedRepo == nil)
     }
 
+    @Test("select forwards to RepoStore when one is wired up")
+    func selectForwardsToRepoStore() async throws {
+        let (defaults, cleanup) = Self.makeDefaults()
+        defer { cleanup() }
+
+        // Use a real fixture repo so RepoStore's RepoFocus can wire up a real
+        // FSWatcher without throwing. RepoStore is exercised against the
+        // same PersistenceStore to confirm last-opened-repo round-trip.
+        let fixtureRoot = GitFixtureHelper.tempURL()
+        try FileManager.default.createDirectory(at: fixtureRoot, withIntermediateDirectories: true)
+        defer { GitFixtureHelper.cleanup(fixtureRoot) }
+        let repoURL = fixtureRoot.appendingPathComponent("alpha")
+        try GitFixtureHelper.cleanRepo(at: repoURL)
+
+        let repo = DiscoveredRepo(
+            url: repoURL,
+            displayName: "alpha",
+            rootPath: fixtureRoot,
+            isBare: false
+        )
+
+        let store = PersistenceStore(defaults: defaults)
+        let repoStore = RepoStore(persistence: store)
+        let model = RepoSidebarModel(
+            persistence: store,
+            repoStore: repoStore,
+            rootsOverride: [fixtureRoot],
+            scanner: { _ in [repo] }
+        )
+
+        await model.refresh()
+        model.select(repo)
+
+        #expect(repoStore.focus?.repo == repo)
+        #expect(store.settings.lastOpenedRepo == repo.url.path)
+
+        model.select(nil)
+        #expect(repoStore.focus == nil)
+        #expect(store.settings.lastOpenedRepo == nil)
+    }
+
     @Test("restoreLastSelection picks up the persisted path after refresh")
     func restoreLastSelectionFindsMatchingRepo() async {
         let (defaults, cleanup) = Self.makeDefaults()

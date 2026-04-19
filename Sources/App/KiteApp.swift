@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct KiteApp: App {
     @State private var persistence: PersistenceStore
+    @State private var repoStore: RepoStore
     @State private var sidebarModel: RepoSidebarModel
 
     init() {
@@ -17,8 +18,11 @@ struct KiteApp: App {
 
         _persistence = State(wrappedValue: store)
 
+        let repos = RepoStore(persistence: store)
+        _repoStore = State(wrappedValue: repos)
+
         let rootsOverride = Self.isRunningUnderXCTest ? KiteApp.fixtureRootsFromLaunchArgs() : nil
-        let model = RepoSidebarModel(persistence: store, rootsOverride: rootsOverride)
+        let model = RepoSidebarModel(persistence: store, repoStore: repos, rootsOverride: rootsOverride)
         _sidebarModel = State(wrappedValue: model)
     }
 
@@ -31,6 +35,7 @@ struct KiteApp: App {
             RootView()
                 .frame(minWidth: 900, minHeight: 600)
                 .environment(persistence)
+                .environment(repoStore)
                 .environment(sidebarModel)
         }
         .windowResizability(.contentSize)
@@ -41,6 +46,7 @@ struct KiteApp: App {
         Settings {
             SettingsRootView()
                 .environment(persistence)
+                .environment(repoStore)
                 .environment(sidebarModel)
         }
     }

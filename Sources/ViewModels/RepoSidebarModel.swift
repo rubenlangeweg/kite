@@ -21,6 +21,9 @@ final class RepoSidebarModel {
     private let persistence: PersistenceStore
 
     @ObservationIgnored
+    private let repoStore: RepoStore?
+
+    @ObservationIgnored
     private let rootsOverride: [URL]?
 
     @ObservationIgnored
@@ -46,15 +49,21 @@ final class RepoSidebarModel {
 
     /// - Parameters:
     ///   - persistence: shared store for pinned repos, extra roots, and last-opened path.
+    ///   - repoStore: optional focus coordinator. When set, `select(_:)` forwards the
+    ///     repo to `repoStore.focus(on:)` so the focused-repo lifecycle kicks in
+    ///     (FSWatcher, GitQueue). Left nil in existing tests that only exercise
+    ///     sidebar state.
     ///   - rootsOverride: optional hardcoded roots. Used by UI tests via the
     ///     `-KITE_FIXTURE_ROOTS` launch argument; in normal runs, nil.
     ///   - scanner: injection seam for tests. Production passes `RepoScanner.scan`.
     init(
         persistence: PersistenceStore,
+        repoStore: RepoStore? = nil,
         rootsOverride: [URL]? = nil,
         scanner: @escaping @Sendable ([URL]) async -> [DiscoveredRepo] = RepoScanner.scan(roots:)
     ) {
         self.persistence = persistence
+        self.repoStore = repoStore
         self.rootsOverride = rootsOverride
         self.scanner = scanner
     }
@@ -74,10 +83,16 @@ final class RepoSidebarModel {
     }
 
     /// Set the focused repo. Writes through to persistence so a relaunch
-    /// restores the same selection (VAL-REPO-008).
+    /// restores the same selection (VAL-REPO-008), and — when a `RepoStore`
+    /// has been injected — forwards to it so the per-repo FSWatcher / GitQueue
+    /// lifecycle starts. `RepoStore` mirrors the last-opened path itself, so
+    /// the persistence write here is redundant when one is present, but we
+    /// keep it unconditional so the sidebar is self-sufficient even in
+    /// repoStore-less configurations (unit tests, legacy wiring).
     func select(_ repo: DiscoveredRepo?) {
         selectedRepo = repo
         persistence.setLastOpenedRepo(repo?.url.path)
+        repoStore?.focus(on: repo)
     }
 
     /// Pin a repo by absolute path. If it's currently discovered, it also
