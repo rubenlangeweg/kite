@@ -1,0 +1,45 @@
+{
+  "featureId": "M4-graph-row-view",
+  "salientSummary": "Canvas-based GraphCell renders commit dots + 3-segment edges for a single LayoutRow; LaneColor → SwiftUI Color mapping (dark-safe); 8 snapshot cases (md5-verified distinct, light+dark) + 3 unit tests green; full validation gate (post-skip) passes. VAL-GRAPH-004/005 via LanePalette reuse; VAL-GRAPH-008 architecturally (per-row Canvas in virtualized List, ≤20 segments per row).",
+  "whatWasImplemented": "Added Sources/Design/LaneColors.swift — extension on LaneColor exposing a hand-tuned SwiftUI Color per palette slot (dark-safe purple via explicit RGB; blue/orange/green/pink/teal via system tints that render correctly in both appearances). Added Sources/Views/Graph/GraphCell.swift — pure inner View wrapping a SwiftUI Canvas with laneWidth 14pt, rowHeight 22pt, dotRadius 4pt, lineWidth 1.5pt. Draws (a) in-edges as either a straight vertical when fromColumn==toColumn or a 3-segment stub-diagonal for bends, (b) out-edges mirrored below the midline, (c) the commit dot — radius+1 when hasRef, filled with the first out-edge's color (first-parent lane color) or the commit-SHA-seeded palette color as fallback for leaf rows, (d) an accent-colored ring when isSelected. All drawing is a pure function of the value types (row, laneCount, isSelected, hasRef). No ViewModel — that's M4-graph-scroll-container's responsibility. Added Tests/KiteTests/ViewTests/GraphCellUnitTests.swift — Swift Testing suite with 3 cases for columnX(0), columnX(3), and LaneColor-mapping non-clear exhaustiveness. Added Tests/KiteTests/ViewTests/GraphCellSnapshotTests.swift — 8 XCTest cases: single dot / linear 3-row stack / merge inbound / branch outbound / octopus 3-parent / current-branch hasRef / selection ring / dark-mode parity. All 8 reference PNGs recorded with NSHostingController.appearance forced to .aqua or .darkAqua per AGENTS.md established pattern; all 8 md5s verified distinct (none byte-identical, including light vs dark merge). Full test suite passes: 138 Swift Testing tests + 18 XCTest tests (all three XCTest suites — BranchList 5, GraphCell 8, StatusHeader 5 — pass under skip-list). swiftformat --lint and swiftlint --strict both exit 0.",
+  "whatWasLeftUndone": "M4-graph-row-meta (right-of-graph content: subject, author, age, pills) and M4-graph-scroll-container (List embedding, scroll preservation, shallow banner, commit-click → diff selection) remain as follow-up features per features.json. Instruments-based 60fps measurement deferred to M4-graph-scroll-container + post-TCC user-testing-validator as documented in the feature brief.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "project regenerated" },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests", "exitCode": 0, "observation": "138 Swift Testing tests in 21 suites passed; 18 XCTest cases across BranchList/GraphCell/StatusHeader snapshot suites passed; TEST SUCCEEDED" },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/85 files require formatting" },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "0 violations, 0 serious in 85 files" },
+      { "command": "md5 Tests/KiteTests/ViewTests/__Snapshots__/GraphCellSnapshotTests/*.png | awk '{print $NF}' | sort -u | wc -l", "exitCode": 0, "observation": "8 (matches file count — all snapshots byte-distinct, including light vs dark)" }
+    ],
+    "interactiveChecks": [
+      { "action": "Visually inspected each recorded PNG (SingleDotNoEdges, LinearThreeRows, MergeInbound, BranchOutbound, OctopusMerge, CurrentBranchDot, SelectionRing, MergeInbound-dark)", "observed": "Each case renders the expected shape: single dot with no edges; vertical stack with differently-colored dots per SHA hash; diagonal+straight in-edges converging on a dot for merge; single in-edge with two forked out-edges (straight blue + diagonal orange) for branch outbound; three converging straight in-edges for octopus; bolder dot for hasRef; accent ring visible for selection; dark background + accent-color-safe lines for dark-mode case." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/ViewTests/GraphCellUnitTests.swift",
+        "cases": [
+          { "name": "columnXForZeroIndex", "verifies": "geometry helper contract underpinning VAL-GRAPH-004 visual stability" },
+          { "name": "columnXForN", "verifies": "geometry helper contract underpinning VAL-GRAPH-004 visual stability" },
+          { "name": "laneColorMappingIsExhaustive", "verifies": "VAL-GRAPH-004 / VAL-GRAPH-005 color-mapping completeness (no clear fallbacks)" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/GraphCellSnapshotTests.swift",
+        "cases": [
+          { "name": "testSingleDotNoEdges", "verifies": "VAL-GRAPH-004 (single-row stable rendering)" },
+          { "name": "testLinearThreeRowsFirstMiddleLast", "verifies": "VAL-GRAPH-008 (per-row Canvas in stack, linear history)" },
+          { "name": "testMergeInbound", "verifies": "VAL-GRAPH-004 (merge shape rendering)" },
+          { "name": "testBranchOutbound", "verifies": "VAL-GRAPH-004 (branch-off fork rendering)" },
+          { "name": "testOctopusMerge", "verifies": "VAL-GRAPH-004 / VAL-GRAPH-006-adjacent (3-parent straight-line fallback rendering)" },
+          { "name": "testCurrentBranchDot", "verifies": "VAL-GRAPH-004 (hasRef bolder-dot affordance)" },
+          { "name": "testSelectionRing", "verifies": "VAL-GRAPH-004 (isSelected accent ring affordance)" },
+          { "name": "testDarkMode", "verifies": "VAL-GRAPH-004 / VAL-UI-010 (dark-mode parity; md5 differs from light)" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": []
+}
