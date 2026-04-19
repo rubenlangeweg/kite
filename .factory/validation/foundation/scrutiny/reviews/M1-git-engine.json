@@ -1,0 +1,66 @@
+{
+  "featureId": "M1-git-engine",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Reviewed Sources/Git/Git.swift (Git.run, Git.stream, CancelFlag, LineReader, buildEnvironment, ensureAvailable, parseVersion), Sources/Git/GitResult.swift, Sources/Git/GitEvent.swift, Sources/Git/GitError.swift, Sources/Git/ErrorClassifier.swift, and Tests/KiteTests/GitTests/{GitRunTests,ErrorClassifierTests}.swift + Support/GitFixtureHelper.swift. Build + 25 tests green. Security invariants hold: `/usr/bin/git` is the only executable path (absolute URL at Git.swift:21, no PATH fallback); GIT_TERMINAL_PROMPT=0, GIT_OPTIONAL_LOCKS=0, LC_ALL=C, LANG=C, GIT_PAGER=cat applied in buildEnvironment on every launch path including ensureAvailable. ErrorClassifier walks network patterns before auth to avoid misclassifying `could not resolve host` as auth. Cancellation is correctly propagated via an NSLock-guarded CancelFlag so the terminationHandler (off-main DispatchQueue) can distinguish user-initiated SIGTERM from a generic non-zero exit. The 5s cancellation test empirically confirms child termination. Two forward-looking correctness issues are non-blocking today because M1 callers produce small outputs; both will matter once M5/M7 ship.",
+    "issues": [
+      {
+        "file": "Sources/Git/Git.swift",
+        "line": 55,
+        "severity": "non-blocking",
+        "description": "Git.run reads stdout and stderr via `readToEnd()` inside the terminationHandler, i.e. after the child has exited. The inline comment at line 42–44 claims 'Drain pipes on separate tasks to avoid the pipe-buffer deadlock,' but the implementation does not actually drain concurrently. For any git invocation whose combined stdout + stderr exceeds the 64 KB pipe buffer (`git diff` / `git show` on large commits, `git log --patch`, `git ls-files` on megarepos), the child will block on write, terminationHandler never fires, and the task hangs until cancelled. VAL-PARSE-007 and all M1 callers pass outputs well under 64 KB so CI is green. M7-uncommitted-diff and M7-commit-diff are the exposed callers; they must either move to Git.stream (which DOES use readabilityHandler) or Git.run must be refactored to drain both pipes concurrently as documented in library/git-cli-integration.md §8. Recommend tracking this as a pre-M7 prerequisite in the orchestrator's backlog."
+      },
+      {
+        "file": "Sources/Git/Git.swift",
+        "line": 82,
+        "severity": "non-blocking",
+        "description": "onCancel closure checks `process.isRunning` before calling `process.terminate()`. A narrow race exists: if the Task is cancelled after the continuation was set up but before `try process.run()` executes on line 73, `isRunning` is false, terminate() is skipped, and then process.run() succeeds and the child runs to completion. The CancelFlag is still set so the terminationHandler throws `.cancelled` and the caller perceives cancellation correctly, but a stray git subprocess runs until natural completion. Acceptable for read-only M1 operations; M5-net-ops should not assume terminate() was called — callers relying on `git fetch` actually stopping should audit this flow."
+      },
+      {
+        "file": "Sources/Git/ErrorClassifier.swift",
+        "line": 13,
+        "severity": "non-blocking",
+        "description": "classify(stderr:exitCode:) accepts exitCode but the parameter is named `_` and never branched on. The doc-comment on line 11 says this is intentional for future refinement. Consider either (a) renaming to `exitCode` and documenting 'reserved for future use' in a single line, or (b) removing the parameter entirely. As written, callers see a parameter they can pass but that has no effect, which is confusing."
+      },
+      {
+        "file": "Sources/Git/GitError.swift",
+        "line": 5,
+        "severity": "non-blocking",
+        "description": "GitError lacks a case for push-specific errors M5-net-ops will hit: hook rejection (`remote rejected` / pre-push hook fail), protected-branch rejection, or 'no such ref' on push. They currently fall through to `.processFailed`. Adding `.remoteRejected(String)` before M5 lands would let the toast layer render actionable messages. Non-blocking for M1 because nothing calls push yet; flag as a pre-M5 guidance update."
+      },
+      {
+        "file": "Sources/Git/Git.swift",
+        "line": 239,
+        "severity": "non-blocking",
+        "description": "`CancelFlag` is declared `@unchecked Sendable` with NSLock guarding. This is correct but the pattern is inherited by M5-net-ops (per the handoff). Consider promoting CancelFlag into a documented reusable helper under Sources/Git/ or a future Sources/Support/ — today it is `private` inside Git.swift, which means if M3-repo-focus-lifecycle's GitQueue or M5's stream variants need similar semantics they will likely re-implement it. Prefer an `internal struct` so the pattern is discoverable and testable."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Every error case in GitError carries a String payload with a `firstLine(of:)` excerpt of stderr. ErrorClassifier applies the excerpt consistently so downstream toasts have a single-line actionable message. Good precedent — M5 should continue the pattern; M2/M3/M6 should not invent parallel error enums with different payload shapes.",
+      "evidence": "Sources/Git/ErrorClassifier.swift:68-72, Sources/Git/GitError.swift:17-41"
+    },
+    {
+      "area": "conventions",
+      "observation": "Git.run's non-zero exit is NOT thrown — callers must opt in via `result.throwIfFailed(classifier:)`. This is the right split (ls-remote, diff, status all have non-error non-zero exit scenarios) but every future feature that assumes 'zero exit = success' needs a throwIfFailed call. Worth codifying in AGENTS.md Services.",
+      "evidence": "Sources/Git/Git.swift:27-28 doc-comment, Sources/Git/GitResult.swift:16"
+    },
+    {
+      "area": "services",
+      "observation": "buildEnvironment inherits the parent process environment before overlaying the hardening keys. SSH_AUTH_SOCK and credential helpers flow through automatically — this is the correct path per AGENTS.md §4 Shared state rules. VAL-SEC-005 test only checks the three required keys; it does not assert that SSH_AUTH_SOCK is preserved. Worth adding a belt-and-braces test before M5 so a future refactor that 'cleans' the env doesn't break SSH auth.",
+      "evidence": "Sources/Git/Git.swift:196-207, Tests/KiteTests/GitTests/GitRunTests.swift:16-22"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-NET-008",
+      "VAL-NET-010",
+      "VAL-PARSE-007",
+      "VAL-SEC-004",
+      "VAL-SEC-005"
+    ],
+    "unverified": []
+  }
+}

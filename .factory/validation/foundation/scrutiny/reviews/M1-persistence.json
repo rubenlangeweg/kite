@@ -1,0 +1,72 @@
+{
+  "featureId": "M1-persistence",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Reviewed Sources/Persistence/{Keys,Settings,PersistenceStore}.swift and Tests/KiteTests/PersistenceTests/PersistenceStoreTests.swift (9 cases). Architecture is clean: a single JSON blob at PersistenceKeys.settingsBlob, JSONEncoder/Decoder, schema-version probe that dispatches before full decode, typed mutators that each call save() synchronously. `@Observable @MainActor` isolates mutations to the main actor; UserDefaults injection via init parameter enables clean test isolation with per-test UUID-keyed suites. Corrupt-blob recovery falls back to defaults and overwrites the garbage so subsequent launches don't re-hit the slow path. Schema v1 is the baseline; the migration hook exists and throws on unknown versions. One design concern about drift between the per-field Keys.swift registry and the aggregate blob, plus the documented naming deviation (KiteSettings vs Settings) are the main items for follow-up.",
+    "issues": [
+      {
+        "file": "Sources/Persistence/Keys.swift",
+        "line": 27,
+        "severity": "non-blocking",
+        "description": "PersistenceKeys declares 9 per-field keys (schemaVersion, pinnedRepos, extraRoots, lastOpenedRepo, lastSelectedBranch, windowFrame, sidebarWidth, detailWidth, autoFetchEnabled) but PersistenceStore only uses `settingsBlob`. The handoff explicitly warns that future features binding via @AppStorage on a per-field key would create drift with the blob. This is real: `@AppStorage(\"nl.rb2.kite.autoFetchEnabled\")` in M5-auto-fetch would write to a different UserDefaults key than `store.settings.autoFetchEnabled`, and the two would silently diverge. Recommend either (a) removing the unused keys and mandating all reads/writes go through PersistenceStore, or (b) adding a deliberate split where those keys are written by PersistenceStore in parallel with the blob. As written, the class-doc promises @AppStorage will Just Work, but it won't. Pick one strategy and document it in AGENTS.md so M5 doesn't walk into the drift."
+      },
+      {
+        "file": "Sources/Persistence/Settings.swift",
+        "line": 12,
+        "severity": "non-blocking",
+        "description": "The type is `KiteSettings` rather than `Settings` to avoid collision with SwiftUI's `Settings` Scene in KiteApp.swift. The handoff documents this. The mission brief (features.json M1-persistence.expectedBehavior) uses 'Settings struct' terminology. Propose adding one sentence to AGENTS.md Conventions → Naming explicitly stating 'Codable persistence root is `KiteSettings`; avoid the bare name `Settings` in source files imported from SwiftUI-using modules.' M2-settings-roots will otherwise re-hit this with Settings tab view names."
+      },
+      {
+        "file": "Sources/Persistence/PersistenceStore.swift",
+        "line": 172,
+        "severity": "non-blocking",
+        "description": "`write(_:to:)` silently swallows a JSONEncoder throw with only a comment. This is correct defensively (today KiteSettings is fully Codable), but swallowed errors make regressions invisible. If a future field forgets Codable conformance, the first visible symptom would be 'persistence quietly stops working.' Recommend adding `os.Logger(subsystem: \"nl.rb2.kite\", category: \"persist\").error(\"Failed to encode KiteSettings: \\(error.localizedDescription)\")` per AGENTS.md observability guidance. Zero cost when it never fires; essential diagnostic when it does."
+      },
+      {
+        "file": "Sources/Persistence/PersistenceStore.swift",
+        "line": 160,
+        "severity": "non-blocking",
+        "description": "load() catches `error` but the caught identifier is unused (`do { ... } catch { return ... }`). SwiftLint doesn't flag this but it's lossy — the exact failure (SchemaProbe decode vs KiteSettings decode vs MigrationError) is thrown away before anyone can log it. Same remediation: `Logger.error(\"Persistence recovery: corrupt blob, resetting to defaults: \\(error)\")`. Without this, a user reporting 'my settings got reset' has no signal to diagnose with."
+      },
+      {
+        "file": "Sources/Persistence/PersistenceStore.swift",
+        "line": 105,
+        "severity": "non-blocking",
+        "description": "setWindowFrame(_ rect: CGRect) saves on every call. Window resize produces many CGRect updates per second. If a M8 feature binds directly to window-resize events, this will cause a save() per frame — UserDefaults writes are cheap but not free. Recommend debouncing (a 250 ms Timer before save()) or limiting this mutator to window-close events. Not a correctness issue, but a perf footgun waiting for M8."
+      },
+      {
+        "file": "Tests/KiteTests/PersistenceTests/PersistenceStoreTests.swift",
+        "line": 22,
+        "severity": "non-blocking",
+        "description": "`fatalError` on UserDefaults(suiteName:) returning nil is fine for tests but the suite name `\"test-\" + UUID().uuidString` is implicitly a valid UserDefaults domain. In practice UserDefaults(suiteName:) returns nil only for reserved names (e.g. the main app's bundle id). Leaving fatalError is OK, but it would be nicer to use Swift Testing's `Issue.record` + `throw` so the test reports a clean failure rather than crashing the runner."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Error enums in this feature (ExtraRootError, MigrationError) are nested inside PersistenceStore rather than at file top-level. M1-git-engine uses top-level GitError. Neither is wrong, but mixing patterns will confuse future workers. Recommend AGENTS.md pick one — I lean top-level (M1-git-engine's style) because they are referenced from tests and callers outside the owning class.",
+      "evidence": "Sources/Persistence/PersistenceStore.swift:127-139 vs Sources/Git/GitError.swift:5"
+    },
+    {
+      "area": "conventions",
+      "observation": "Per-test UserDefaults isolation via `UserDefaults(suiteName: \"test-\" + UUID().uuidString)` with `removePersistentDomain(forName:)` cleanup is the right pattern. Future feature tests that need shared state (GitQueue, AutoFetchTimer, Window frame) should adopt the same helper — consider extracting `PersistenceTestHelper.makeIsolatedDefaults()` under Tests/Support/ so M5-auto-fetch doesn't re-implement it.",
+      "evidence": "Tests/KiteTests/PersistenceTests/PersistenceStoreTests.swift:19-29"
+    },
+    {
+      "area": "services",
+      "observation": "KiteSettings.windowFrame uses a hand-written CGRectValue wrapper, explicitly rejecting CGRect's synthesized Codable. This is defensive against SDK drift and also keeps on-disk JSON human-readable — worth calling out as a pattern for any future on-disk CGSize / CGPoint fields.",
+      "evidence": "Sources/Persistence/Settings.swift:60-83"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-PERSIST-001",
+      "VAL-PERSIST-002",
+      "VAL-PERSIST-003",
+      "VAL-PERSIST-004",
+      "VAL-PERSIST-005"
+    ],
+    "unverified": []
+  }
+}

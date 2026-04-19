@@ -1,0 +1,57 @@
+{
+  "featureId": "M1-project-scaffold",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Reviewed project.yml (xcodegen spec), Info.plist, Kite.entitlements, Sources/App/KiteApp.swift, Sources/App/Commands.swift, Sources/Views/RootView.swift, .swiftformat, .swiftlint.yml, .gitignore, README.md, and the two smoke test files. Build succeeds, swiftformat --lint and swiftlint --strict both report 0 violations across 39 files, Info.plist in the built app bundle contains every VAL-PKG-004 key. Three-pane NavigationSplitView scaffold compiles cleanly with accessibility identifiers wired for later XCUITests. Minor documentation drift and a forward-looking naming concern are non-blocking.",
+    "issues": [
+      {
+        "file": "README.md",
+        "line": 38,
+        "severity": "non-blocking",
+        "description": "Documents the deprecated swiftformat flag order (`swiftformat --lint Sources Tests`). swiftformat 0.61+ requires paths before flags: `swiftformat Sources Tests --lint`. The M1-project-scaffold handoff already flagged this in discoveredIssues but the README was not updated. Every future worker will copy the wrong command from the README."
+      },
+      {
+        "file": "Sources/App/KiteApp.swift",
+        "line": 15,
+        "severity": "non-blocking",
+        "description": "The `Settings { SettingsPlaceholderView() }` scene uses SwiftUI's `Settings` Scene type. This is correct and is exactly why M1-persistence had to rename its Codable root from `Settings` to `KiteSettings` to avoid the collision. Document this constraint in AGENTS.md or the swiftui-worker SKILL so M2-settings-roots (which owns the real Settings scene body) does not reintroduce the clash when it replaces the placeholder."
+      },
+      {
+        "file": "Sources/App/Commands.swift",
+        "line": 11,
+        "severity": "non-blocking",
+        "description": "`EmptyCommands` replaces `.newItem` (File → New Window) with an empty group. This silently removes the default ⌘N binding that VAL-UI-009 depends on (new-window shortcut). M8-commands-and-menu will need to restore an explicit `CommandGroup(replacing: .newItem)` with a real `Button(\"New Window\")` + `.keyboardShortcut(\"n\")`. Not a defect in M1's placeholder, but worth a comment line pointing at the VAL-UI-009 reinstatement."
+      },
+      {
+        "file": "Sources/Views/RootView.swift",
+        "line": 33,
+        "severity": "non-blocking",
+        "description": "`#Preview { RootView() }` is fine today (no Process work), but per AGENTS.md known-gotcha #3 previews will hang once Git operations land. Consider guarding expensive subviews behind `ProcessInfo.processInfo.environment[\"XCODE_RUNNING_FOR_PREVIEWS\"] == \"1\"` once M2 wires real scanning. Pre-emptive note, not an M1 defect."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "project.yml sets SWIFT_VERSION=5.9 but AGENTS.md §3 installed-dev-tools lists swift 6.2.4. The Swift 6.2 compiler in Swift-5 language mode is the intent — just noting that any Swift 6 strict-concurrency behaviour workers encounter (e.g. Sendable synthesis rules the M1-git-parsers handoff mentioned) is actually Swift 5.10+ behaviour in this build.",
+      "evidence": "project.yml:13, AGENTS.md §3 Services"
+    },
+    {
+      "area": "services",
+      "observation": "swift-snapshot-testing SPM dependency deferred per project.yml:82–85 comment. M2-repo-sidebar / M4-graph-row-view will need to add this cleanly. No Package.resolved drift until then.",
+      "evidence": "project.yml:82"
+    },
+    {
+      "area": "conventions",
+      "observation": "Info.plist contains CFBundleShortVersionString=0.1.0 / CFBundleVersion=1 that also live in project.yml (MARKETING_VERSION / CURRENT_PROJECT_VERSION). Both sources agree today; M8-release-packaging should decide which is canonical to avoid drift.",
+      "evidence": "Info.plist:20-22, project.yml:39-40"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-UI-001",
+      "VAL-PKG-004"
+    ],
+    "unverified": []
+  }
+}

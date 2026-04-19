@@ -1,0 +1,73 @@
+{
+  "featureId": "M1-git-parsers",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Reviewed Sources/Git/Models/{Commit,Branch,Remote,RefKind,StatusSummary,FileDiff,ProgressEvent}.swift and Sources/Git/Parsers/{ParseError,BranchParser,LogParser,StatusParser,ForEachRefParser,DiffParser,ProgressParser}.swift plus 7 test files spanning 41 cases. Every parser has happy-path + empty-input + malformed-input coverage; BranchParser, LogParser, StatusParser, ForEachRefParser, DiffParser all exercise real git output produced by GitFixtureHelper (no mocking). ProgressParser correctly uses literal `\\r` in test fixtures because real git stderr can't easily be induced synchronously. Models are value types with implicit Sendable (swiftformat strips redundant conformance). ParseError is a domain enum with LocalizedError. Two deferred edge cases are documented in discoveredIssues and don't block M1 but need library tracking so later features pick them up.",
+    "issues": [
+      {
+        "file": "Sources/Git/Parsers/DiffParser.swift",
+        "line": 216,
+        "severity": "non-blocking",
+        "description": "extractDiffGitPaths does not handle git's quoted-path format for filenames containing spaces (`diff --git \"a/foo bar\" \"b/foo bar\"`). The handoff flags this explicitly and M7-uncommitted-diff / M7-commit-diff will need it. Recommend adding a known-limitations note to library/git-cli-integration.md's parser section so M7 picks it up — as written, a user whose repo has spaces in filenames will see the diff parse silently drop a file header (parts.count guard returns nil, builder.oldPath/newPath stay nil, subsequent lines still land in hunks). Suggest logging a `Logger` warning at the extract site so the failure is observable in Console, not silent."
+      },
+      {
+        "file": "Sources/Git/Parsers/DiffParser.swift",
+        "line": 128,
+        "severity": "non-blocking",
+        "description": "Line 128 reads `raw.hasPrefix(\"index \"), raw.hasSuffix(\"index \") == false` — the second clause is vacuously true for any line that starts with 'index ' and has content after (which is the normal case), and the variable name `raw` plus the contorted negative read makes the intent murky. It is guarding against a malformed line that is exactly `index ` (with trailing space and nothing else). Either replace with a positive check `raw.count > \"index \".count && raw.hasPrefix(\"index \")` or drop the guard (line 188's `isInformationalHeader` would return true anyway via `raw.hasPrefix(\"index \")`), making line 128 redundant. Low risk; readability win."
+      },
+      {
+        "file": "Sources/Git/Parsers/ProgressParser.swift",
+        "line": 40,
+        "severity": "non-blocking",
+        "description": "`consume(_:)` documentation states 'only the final event is returned — earlier events in the same chunk still update internal state.' Tests at ProgressParserTests.swift:7-15 only verify the final event. For M5-fetch to drive a smooth progress bar, intermediate events need to be observable (otherwise a chunk containing 1%→2%→3%→…→100% would only expose 100% and the progress bar jumps). The current API forces M5 to either (a) split chunks on `\\r`/`\\n` before calling ProgressParser, defeating the point, or (b) expose the latest state only. Suggest either adding a yield-all variant `func consumeAll(_:) -> [ProgressEvent]` or having the M5 worker wire a closure callback. Not a bug per the spec, but the shape is suboptimal for its only consumer."
+      },
+      {
+        "file": "Sources/Git/Models/RefKind.swift",
+        "line": 12,
+        "severity": "non-blocking",
+        "description": "`.head` case is defined but never produced (ForEachRefParser filters out `HEAD` and `*/HEAD` refs). Either use it to represent the symbolic-HEAD pseudo-ref explicitly (and let UI decide to draw it) or remove the unused case. Dead enum cases are harmless but confuse downstream maintenance — if M3-branch-list later wants 'current' badging it will probably ignore this case and use Branch.isHead. Recommend deleting unless a concrete consumer is planned."
+      },
+      {
+        "file": "Sources/Git/Parsers/StatusParser.swift",
+        "line": 83,
+        "severity": "non-blocking",
+        "description": "`switch kind` handles `1`, `2`, `u`, `?`, `!`, `#`, and defaults to no-op. The `#` case is covered twice — once by the `hasPrefix(\"# \")` branch at line 78 (consumed before reaching the switch) and once in the switch. The switch case is unreachable in practice. Harmless but dead code; remove for clarity."
+      },
+      {
+        "file": "Sources/Git/Parsers/LogParser.swift",
+        "line": 59,
+        "severity": "non-blocking",
+        "description": "Uses a new Swift 5.10+ if-expression syntax `let parents: [String] = if parentsRaw.isEmpty { [] } else { ... }`. Fine under the Swift 6.2 toolchain we're on, but project.yml sets SWIFT_VERSION=5.9. Under strict Swift-5.9 mode this would fail to compile. Recommend either (a) bumping project.yml's SWIFT_VERSION to 5.10 to match AGENTS.md §3's 'Swift 5.9+ / Xcode 16 / Swift 5.10 acceptable', or (b) rewriting as a ternary / switch expression for portability. Currently compiles because Xcode 16's toolchain is Swift 5.10 regardless of the spelled project setting."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "All parsers are `enum` with static functions (pure, no state). ProgressParser is the lone exception — a final class — because it is stateful across chunks (carry buffer + last-emitted dedup). This is a consistent, principled split worth codifying: stateless parsers as enums, stateful stream consumers as final classes.",
+      "evidence": "Sources/Git/Parsers/BranchParser.swift:16, LogParser.swift:14, StatusParser.swift:29, ForEachRefParser.swift:18, DiffParser.swift:20 vs ProgressParser.swift:25"
+    },
+    {
+      "area": "conventions",
+      "observation": "Every parser's empty-input behaviour is 'return empty collection, do not throw'. Tests explicitly assert this. M2+ workers should follow the same contract — throwing on empty input is almost always wrong because it conflates 'no data' with 'bad data'.",
+      "evidence": "All 7 parsers have a dedicated empty-input test, e.g. BranchParserTests.swift:38-42"
+    },
+    {
+      "area": "services",
+      "observation": "GitFixtureHelper.exec / capture / captureData use their own environment() helper that duplicates Git.swift's buildEnvironment hardening (minus GIT_PAGER=cat). Worth consolidating into a single TestSupport util so future test helpers don't drift when we add e.g. HOME-isolation for credential helpers.",
+      "evidence": "Tests/KiteTests/GitTests/Support/GitFixtureHelper.swift:75-82 vs Sources/Git/Git.swift:196-207"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-PARSE-001",
+      "VAL-PARSE-002",
+      "VAL-PARSE-003",
+      "VAL-PARSE-004",
+      "VAL-PARSE-005",
+      "VAL-PARSE-006"
+    ],
+    "unverified": []
+  }
+}

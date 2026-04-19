@@ -703,3 +703,14 @@ for b in branches {
 | Worktrees         | `git worktree list`                                                 | capture  |
 
 Every invocation prefixes `--no-pager` and uses the env block from §9.
+
+---
+
+## Known parser limitations (post-M1-git-parsers findings)
+
+1. **`DiffParser` does not handle quoted-path diff headers.** Git emits `diff --git "a/foo bar" "b/foo bar"` (with quotes and embedded space) when filenames contain spaces or non-printable characters. The current `extractDiffGitPaths` implementation returns `nil` and the resulting `FileDiff` leaves `oldPath`/`newPath` unset. M7-uncommitted-diff and M7-commit-diff MUST extend `extractDiffGitPaths` before shipping against repos with space-in-filename diffs. Emit a `Logger` warning at the extract site so silent drops are observable during dev.
+
+2. **`ProgressParser.consume(_:)` returns only the LAST `ProgressEvent` per chunk.** Intermediate percent updates within a chunk are lost. If M5-fetch needs smooth frame-by-frame progress, add `consumeAll(_:) -> [ProgressEvent]` or switch the parser to an `AsyncStream<ProgressEvent>` shape. For v1 toolbar indicator, last-per-chunk is acceptable.
+
+3. **`Git.run` captures output only post-termination via `readToEnd()`.** Safe for commands whose combined stdout+stderr stays under ~64 KB (pipe-buffer size). Large-output commands (`git diff`, `git show`, `git log --patch`, `git archive`) **will pipe-buffer-deadlock the child**. Use `Git.stream` for those OR refactor `Git.run` to drain both pipes concurrently via `readabilityHandler`. Tracked as fix feature `M1-fix-git-run-drain`, scheduled pre-M7.
+

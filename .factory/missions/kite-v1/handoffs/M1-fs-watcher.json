@@ -1,0 +1,51 @@
+{
+  "featureId": "M1-fs-watcher",
+  "salientSummary": "Added Sources/Repo/FSWatcher.swift (FSEventStream-backed recursive watcher with 500ms DispatchWorkItem debounce, MainActor-isolated onChange) + 5 Swift Testing cases under Tests/KiteTests/RepoTests/FSWatcherTests.swift. All 63 KiteTests green (5 new + 58 preserved). Validation gate (xcodegen, xcodebuild build, xcodebuild test, swiftformat --lint, swiftlint --strict) all exit 0. VAL-REPO-010 fulfilled; VAL-GRAPH-010 partially fulfilled (refresh mechanism is now available; M4-graph-scroll-container owns the scroll-preservation wiring).",
+  "whatWasImplemented": "FSWatcher class (`final class FSWatcher: @unchecked Sendable`) with the spec-prescribed API: `init(path:coalesceMillis:onChange:)` (default 500ms), `start() throws`, `stop()` (idempotent + deinit-safe). FSEventStreamCreate is called with `kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer` and scheduled via `FSEventStreamSetDispatchQueue` on a dedicated serial queue `nl.rb2.kite.fswatcher`. The raw callback cancels any pending `DispatchWorkItem` and schedules a new one `coalesceMillis` out via `queue.asyncAfter`; when it fires it hops to `MainActor` via `Task { @MainActor in onChange() }` so `onChange` is guaranteed main-actor-isolated. `stop()` takes stream + pending work out under a state lock, then releases outside the lock via `FSEventStreamStop` → `FSEventStreamInvalidate` → `FSEventStreamRelease` — no leaked stream, idempotent across repeated calls and safe from `deinit`. `start()` pre-checks path existence + directory-ness (FSEventStreamCreate happily accepts bogus paths and silently never fires, so we surface `.invalidPath` eagerly) and maps `FSEventStreamCreate == nil` to `.streamCreationFailed`. FSEvents latency (0.05s kernel coalesce + our 500ms DispatchWorkItem) documented in the class doc. Tests use `@testable import Kite` + `GitFixtureHelper.tempURL()`/`.cleanup()`; a small `CallbackCounter` (NSLock-backed) is used instead of Swift Testing's `confirmation` because the 500ms FSEvents native latency + 500ms user coalesce makes expected-count guarantees more robust with a counter + 2s wait than with a confirmation window.",
+  "whatWasLeftUndone": "`Sources/Repo/RepoScanner.swift` (M2-repo-scan) and `RepoStore.swift`/`GitQueue.swift` (M3-repo-focus-lifecycle) are deferred to their owning features as instructed by the spec. Full VAL-GRAPH-010 (scroll-position preservation) requires a SwiftUI container that the graph feature (M4-graph-scroll-container) hasn't shipped yet — only the refresh trigger it will use is in place. Instruments Leaks verification was not run locally (blocked by TCC on the CI-style invocation); the unit test `deinitReleasesStream` plus manual code review of the `FSEventStreamInvalidate/Release` pairing cover the leak surface within the mission's tolerance for M1.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Regenerated Kite.xcodeproj picking up Sources/Repo/FSWatcher.swift and Tests/KiteTests/RepoTests/FSWatcherTests.swift via directory scanning." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build (DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer)", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests", "exitCode": 0, "observation": "63 tests in 10 suites passed in 12.827s. Suites: BranchParser (7), DiffParser (7), ErrorClassifier (13), FSWatcher (5, new), ForEachRefParser (6), Git.run / Git.stream (10), LogParser (7), ProgressParser (8), StatusParser (6), Kite scaffold smoke (2). 5 new FSWatcher + 58 preserved = 63." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests/FSWatcherTests", "exitCode": 0, "observation": "5 of 5 passed in 8.316s. testWatcherFiresOnFileCreation=2.155s, testWatcherCoalescesRapidBursts=2.194s, testStopPreventsFurtherCallbacks=1.221s, testInvalidPathThrows=0.001s, testDeinitReleasesStream=2.740s." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/35 files require formatting (after auto-format ran once to pick up swiftTestingTestCaseNames/docComments/redundantSelf/redundantReturn/redundantAsync normalisation on the new files)." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Done linting! Found 0 violations, 0 serious in 35 files." }
+    ],
+    "interactiveChecks": [
+      { "description": "Verify onChange is never invoked off the main actor: the closure field is typed `@MainActor () -> Void`, and the debounce-fire path enters a `Task { @MainActor in onChange() }` hop. The FSEvents raw callback itself runs on the dedicated `nl.rb2.kite.fswatcher` dispatch queue and never calls `onChange` directly.", "result": "Source inspection confirms; Swift 6 concurrency would have rejected a non-main-actor call site against the @MainActor typed closure." },
+      { "description": "Verify FSEventStream leak surface: stream is stored in `stream: FSEventStreamRef?`, set once in `start()`, released exactly once in `stop()` via Stop→Invalidate→Release. `deinit` calls `stop()`. `stop()` is idempotent (guarded by nil-out under the stateLock).", "result": "Manual code review + `testDeinitReleasesStream` which drops a watcher reference, waits, then arms a fresh watcher on the same path and observes it fire correctly." },
+      { "description": "Verify 500ms coalesce: testWatcherCoalescesRapidBursts writes 10 files back-to-back in <100ms and asserts exactly one callback after 2s. Passes consistently across re-runs.", "result": "Passed in 2.194s — count == 1." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/RepoTests/FSWatcherTests.swift",
+        "cases": [
+          { "name": "fires onChange after a file is created in the watched directory", "verifies": "VAL-REPO-010" },
+          { "name": "coalesces rapid bursts into a single callback", "verifies": "VAL-REPO-010" },
+          { "name": "stop prevents any further callbacks", "verifies": "VAL-REPO-010" },
+          { "name": "throws when started on a non-existent path", "verifies": "VAL-REPO-010" },
+          { "name": "deinit releases the stream safely and a fresh watcher works", "verifies": "VAL-REPO-010" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "FSEventStreamCreate does NOT fail when given a non-existent path — it accepts it silently and simply never delivers events. The original spec's `testInvalidPathThrows` language ('FSEventStreamCreate can return nil ... surface a throw') is slightly imprecise; we added an explicit FileManager existence + directory-ness pre-check inside `start()` and kept `.streamCreationFailed` as a distinct enum case for the exhaustively-rare real-nil path. Worth mentioning to M2-repo-scan: callers should be prepared to catch `FSWatcher.WatcherError.invalidPath(path:)` (fresh case) alongside `.streamCreationFailed(path:)`.",
+      "affectsFeature": "M2-repo-scan, M3-repo-focus-lifecycle"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "`onChange` is invoked via `Task { @MainActor in onChange() }` after the debounce fires, which introduces a small (typically sub-millisecond) additional async hop beyond the coalesceMillis quiet period. For the 2s refresh budget in VAL-REPO-010 this is irrelevant, but M4-graph-scroll-container should be aware that the observable timeline is 'raw FS event' → 'coalesceMillis debounce' → 'MainActor Task hop' → 'onChange'.",
+      "affectsFeature": "M4-graph-scroll-container"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "FSWatcher is not restartable after `stop()` — calling `start()` on a stopped watcher is a no-op by design (cleaner lifecycle than re-arming a stream after release). M2/M3 should treat the watcher as one-shot per focused repo and instantiate a new FSWatcher when switching repos, not `stop() + start()` on the same instance."
+    }
+  ]
+}

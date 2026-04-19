@@ -5,3 +5,25 @@
 {"event":"toolchain_ready","xcode":"26.4.1","xcodegen":"2.45.4","swiftformat":"0.61.0","swiftlint":"0.63.2","developer_dir":"/Applications/Xcode.app/Contents/Developer","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"shared_state_update","file":"AGENTS.md","description":"Added DEVELOPER_DIR export requirement and xcodegen-based project workflow","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"feature_start","featureId":"M1-project-scaffold","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M1-project-scaffold","status":"completed","commit":"7b91442","nonBlockingIssues":["xcuitest_tcc_permission","swiftformat_arg_order"],"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"AGENTS.md","description":"Corrected swiftformat invocation: paths BEFORE --lint flag (0.61+ syntax)","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"tcc_warning","message":"XCUITest blocked by Automation/Accessibility TCC permission; will need user grant before M2 user-testing","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M1-git-engine","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M1-git-engine","status":"completed","commit":"b8de06b","testsAdded":17,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M1-git-parsers","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M1-git-parsers","status":"completed","commit":"fa97529","testsAdded":41,"totalTestsGreen":58,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M1-fs-watcher","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M1-fs-watcher","status":"completed","commit":"1ec05dd","testsAdded":5,"totalTestsGreen":63,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M1-persistence","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M1-persistence","status":"completed","commit":"8d2b645","testsAdded":9,"totalTestsGreen":72,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_features_complete","milestone":"foundation","featuresCompleted":5,"totalTestsGreen":72,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"scrutiny_start","milestone":"foundation","round":1,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"scrutiny_complete","milestone":"foundation","round":1,"status":"pass-with-non-blocking-issues","blockingIssues":0,"nonBlockingIssues":14,"fulfilledAssertions":23,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"AGENTS.md","description":"Added KiteSettings naming rule, Git.run 64KB pipe-buffer boundary, log-on-swallow convention","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"INTERFACES.md","description":"Added FSWatcher one-shot lifecycle rule","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"library/git-cli-integration.md","description":"Added Known parser limitations section: DiffParser quoted paths, ProgressParser last-per-chunk, Git.run pipe-buffer boundary","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"skills/git-engine-worker/SKILL.md","description":"Codified stateless-enum-parser vs stateful-class-consumer pattern","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"README.md","description":"Corrected swiftformat flag order","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"fix_features_queued","items":["M1-fix-git-run-drain (pre-M7)","M1-fix-git-error-push-cases (pre-M5)","M1-fix-progress-consume-all (pre-M5)"],"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_user_testing_skipped","milestone":"foundation","reason":"Foundation features are API/unit-level; scrutiny covered VAL-SEC grep audit; UI-visible user testing begins at M2-repo-sidebar","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_complete","milestone":"foundation","testsGreen":72,"commits":5,"timestamp":"2026-04-19T00:00:00Z"}

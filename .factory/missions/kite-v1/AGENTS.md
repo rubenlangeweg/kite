@@ -41,6 +41,7 @@
 - Git command wrappers: `Git.fetch`, `Git.pull`, `Git.push`, `Git.branchList`, etc. Not `GitFetcher`, not `FetchService`.
 - Views: suffix with `View` (`RepoSidebarView`, `GraphRow`, `DiffPane`). ViewModels: suffix with `Model` (`RepoModel`, `GraphViewModel`).
 - Test names: `test<What>_<When>_<Then>` with Swift Testing's `@Test("description")` annotations where clearer.
+- **Persistence root type is `KiteSettings`, NOT `Settings`.** SwiftUI's `Settings` scene type is imported by `Sources/App/KiteApp.swift` and collides with a bare `Settings` name. For any Settings-related view types in later features, use `SettingsRootsTab`, `SettingsGeneralTab`, `SettingsAboutTab` — never bare `SettingsView`.
 
 ### File layout
 
@@ -101,7 +102,7 @@ cd /Users/ruben/Developer/gitruben/kite
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 xcodebuild -scheme Kite -configuration Debug build
 xcodebuild -scheme Kite -configuration Debug test -destination 'platform=macOS'
-swiftformat --lint Sources Tests
+swiftformat Sources Tests --lint   # NOTE: paths BEFORE --lint flag in swiftformat ≥0.61
 swiftlint --strict
 ```
 
@@ -160,6 +161,8 @@ The running app has no HTTP endpoint. Healthcheck is:
 
 ### Git CLI
 
+0. **`Git.run` pipe-buffer boundary (CRITICAL for M7).** `Git.run` captures stdout/stderr only after process termination via `readToEnd()`. This is safe for any git command whose combined output stays under ~64 KB (pipe-buffer size). For large-output commands — `git diff`, `git show`, `git log --patch`, `git archive` — use `Git.stream` instead, or refactor `Git.run` to drain both pipes concurrently via `readabilityHandler`. **Do NOT assume `Git.run` scales to diff-sized outputs.** Tracked as a pre-M7 fix feature.
+
 1. **`git log --all --topo-order` with `-n 200` truncates BEFORE topo-ordering** — confirmed in `library/git-cli-integration.md` §4. Use `--date-order` if 200-commit selection needs to follow wall clock. We accept topo for v1 (more stable DAG).
 2. **Null-delimited parsers** — always use `-z` flag when available, and split on `\0`, never on `\n`. Branch names can contain printable unicode and path separators in pathological cases.
 3. **`git pull --ff-only` exit codes** — exit 128 for non-FF, exit 1 for merge conflicts (shouldn't happen with `--ff-only` but document).
@@ -183,6 +186,7 @@ The running app has no HTTP endpoint. Healthcheck is:
 ## Observability during development
 
 - `os.Logger` with subsystems `git`, `repo`, `ui`, `persist`, `layout`. Log level `.debug` for internals, `.info` for user-visible ops, `.error` for failures.
+- **Never silently swallow errors.** When a feature must continue past a failure (corrupt UserDefaults, failed JSON encode, missing FS parent, unparseable git output, etc.), log it via `Logger(subsystem: "nl.rb2.kite", category: <area>).error(...)` so the failure is observable in Console.app. A silent `catch { }` is never acceptable; `catch { logger.error(...) }` is.
 - No crash reporting in v1. If Kite crashes, macOS writes a crash log under `~/Library/Logs/DiagnosticReports/Kite-*` which we inspect manually.
 
 ## Definition of Done (per feature)

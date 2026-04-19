@@ -1,0 +1,62 @@
+{
+  "featureId": "M1-git-engine",
+  "salientSummary": "Git.run/Git.stream async wrappers around /usr/bin/git with Task-cancellation propagation, GitError enum, ErrorClassifier mapping 8 stderr patterns, GitFixtureHelper for future tests. 17/17 Swift Testing cases green. VAL-NET-008, VAL-NET-010, VAL-PARSE-007, VAL-SEC-004, VAL-SEC-005 fulfilled.",
+  "whatWasImplemented": "Added Sources/Git/Git.swift with Git.run(args:cwd:env:) async throws -> GitResult and Git.stream(args:cwd:env:) -> AsyncThrowingStream<GitEvent, Error>. Cancellation is wired via withTaskCancellationHandler + a thread-safe CancelFlag that the terminationHandler (running on a background DispatchQueue) can observe, so SIGTERM'd processes surface as GitError.cancelled instead of a generic non-zero exit. Added Git.ensureAvailable() startup check (version parse; fails if git < 2.40). Sources/Git/GitResult.swift provides the captured result plus a throwIfFailed(classifier:) convenience. Sources/Git/GitEvent.swift defines .stdoutLine/.stderrLine/.completed. Sources/Git/GitError.swift defines the full domain-error enum (missingExecutable, processFailed, auth, nonFastForward, noUpstream, dirtyWorkingTree, networkUnreachable, notAGitRepository, cancelled) conforming to Error + LocalizedError. Sources/Git/ErrorClassifier.swift is a pure function mapping known stderr patterns — network checks run before auth checks so `could not resolve host` classifies as .networkUnreachable, not .auth. Every Process hardcodes /usr/bin/git and sets GIT_TERMINAL_PROMPT=0, GIT_OPTIONAL_LOCKS=0, LC_ALL=C, LANG=C, GIT_PAGER=cat; parent env is inherited so SSH_AUTH_SOCK and credential helpers flow through. Stdout/stderr drained on separate readers (async line-reader splits on both \\n and \\r for future progress parsing) to avoid pipe-buffer deadlock. Tests added: GitRunTests (10 cases incl. pre-cancelled and mid-flight cancellation using a sleep-script masquerading as ssh via core.sshCommand), ErrorClassifierTests (parameterized across 8 stderr fixtures + 4 throwIfFailed cases), and a reusable GitFixtureHelper under Tests/KiteTests/GitTests/Support/.",
+  "whatWasLeftUndone": "ProgressParser (which maps stderr lines like `Receiving objects: 42%\\r` to percentages) is deferred to M1-git-parsers per the feature spec — Git.stream yields raw lines only. Sources/Git/Models/ was not created because SKILL.md forbids dead placeholder files; M1-git-parsers will create it when it introduces real models.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "regenerated Kite.xcodeproj with Sources/Git/* and Tests/KiteTests/GitTests/* picked up automatically via directory scanning" },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests", "exitCode": 0, "observation": "Test run with 17 tests in 3 suites passed after 0.814 seconds. Suites: ErrorClassifier (13 test cases incl. 8-fixture parameterised classify test), Git.run / Git.stream (10 tests), Kite scaffold smoke tests (2 preserved from scaffold)" },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/13 files require formatting" },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Done linting! Found 0 violations, 0 serious in 13 files." }
+    ],
+    "interactiveChecks": [
+      { "description": "Grep over Sources/Git/** for forbidden git operations (--force, reset --hard, clean, stash, commit, merge, rebase, cherry-pick, push -f)", "result": "no matches in any Process argument list; only mentions are in user-facing error strings that quote git's own stderr (e.g. 'stash or commit your changes')" }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/GitTests/GitRunTests.swift",
+        "cases": [
+          { "name": "Git.run returns exit 0 for git --version", "verifies": "VAL-SEC-004" },
+          { "name": "Git.buildEnvironment sets the three required keys", "verifies": "VAL-SEC-005" },
+          { "name": "Git uses absolute /usr/bin/git path", "verifies": "VAL-SEC-004" },
+          { "name": "Git.run surfaces non-zero exit in GitResult without throwing", "verifies": "VAL-SEC-005" },
+          { "name": "Pre-cancelled Task throws .cancelled before launching a Process", "verifies": "VAL-NET-010" },
+          { "name": "Cancelling mid-flight terminates the child Process within 5s", "verifies": "VAL-NET-010" },
+          { "name": "Git.run preserves cwd for repo-scoped commands", "verifies": "VAL-SEC-004" },
+          { "name": "Git.stream yields stdout lines and a .completed event with exit code", "verifies": "VAL-NET-008" },
+          { "name": "Git.ensureAvailable succeeds on this host", "verifies": "VAL-SEC-004" },
+          { "name": "parseVersion extracts major.minor", "verifies": "VAL-SEC-004" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/GitTests/ErrorClassifierTests.swift",
+        "cases": [
+          { "name": "classifies known git stderr patterns (parameterised across 8 fixtures: auth x3, non-FF, noUpstream, dirty tree, network, not-a-repo)", "verifies": "VAL-PARSE-007" },
+          { "name": "returns nil for unknown stderr", "verifies": "VAL-PARSE-007" },
+          { "name": "GitResult.throwIfFailed maps classified stderr to typed error", "verifies": "VAL-PARSE-007" },
+          { "name": "GitResult.throwIfFailed falls back to .processFailed for unknown stderr", "verifies": "VAL-PARSE-007" },
+          { "name": "GitResult.throwIfFailed is a no-op on success", "verifies": "VAL-PARSE-007" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/GitTests/Support/GitFixtureHelper.swift",
+        "cases": []
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "The mid-flight cancellation test relies on a locally-written shell script set as core.sshCommand to guarantee a deterministic long-running git invocation. Writing a helper under the system temp directory is fine on macOS with our sandbox-off posture, but if a later feature enables App Sandbox for tests, this fixture pattern will need revisiting (likely via a bundled Resource).",
+      "affectsFeature": "future sandbox-enabled test runs"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "terminationHandler runs on an arbitrary DispatchQueue and cannot see Task.isCancelled. Introduced a small `CancelFlag` class (NSLock-guarded bool) set from the withTaskCancellationHandler onCancel closure and read in the terminationHandler to decide whether to surface GitError.cancelled vs a generic GitResult. This mirrors the pattern M3-repo-focus-lifecycle / M5-net-ops will need — if a future feature refactors cancellation (e.g. swallowing SIGTERM into a stream termination), it should be aware of the flag's lifecycle."
+    }
+  ]
+}

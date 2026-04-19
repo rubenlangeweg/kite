@@ -37,6 +37,12 @@ Features likely to use this worker: M1-git-engine, M1-git-parsers, M1-fs-watcher
 
 3. **Design pure functions first**. The engine is best tested when parsers and layout are pure `(Input) -> Output` functions. Only `Git.run` and `FSWatcher` have side effects.
 
+   **Pattern (established in M1-git-parsers):**
+   - **Stateless parsers** (input fully parsed per call) → `enum` namespace with `static func parse(...) throws -> Result`. Examples: `BranchParser`, `LogParser`, `StatusParser`, `ForEachRefParser`, `DiffParser`.
+   - **Stateful stream consumers** (carry state across chunks, dedup, or buffer partials) → `final class` with a `func consume(_:) -> Event?` method. Example: `ProgressParser` — carry-buffer + last-emitted dedup across `\r`-chunked input.
+   - **Algorithms over immutable data** (graph layout) → `enum` namespace with `static func compute(...) -> [Row]`.
+   Pick the right shape upfront; don't mix.
+
 4. **Write tests first (RED)**: fixture-based tests in `Tests/GitTests/`. For each parser, add:
    - Happy-path test with real git output captured from a fixture repo.
    - Empty-output test.

@@ -1,0 +1,189 @@
+{
+  "milestone": "foundation",
+  "round": 1,
+  "status": "pass-with-non-blocking-issues",
+  "validatorsRun": {
+    "build": {
+      "exitCode": 0,
+      "observation": "xcodegen generate + xcodebuild -scheme Kite -configuration Debug build: ** BUILD SUCCEEDED ** with zero warnings. Kite.app signed ad-hoc, Info.plist baked with all VAL-PKG-004 keys (CFBundleIdentifier=nl.rb2.kite, CFBundleName=Kite, LSApplicationCategoryType=public.app-category.developer-tools, LSMinimumSystemVersion=15.0, NSHighResolutionCapable=true)."
+    },
+    "test": {
+      "exitCode": 0,
+      "observation": "xcodebuild test -scheme Kite -destination 'platform=macOS' -only-testing:KiteTests: 72 tests in 11 suites passed in 12.818s. Suites: BranchParser (7), DiffParser (7), ErrorClassifier (13), FSWatcher (5), ForEachRefParser (6), Git.run / Git.stream (10), LogParser (7), PersistenceStore (9), ProgressParser (8), StatusParser (6), Kite scaffold smoke (2). Per task guidance, KiteUITests was NOT run (blocked by host TCC automation grant)."
+    },
+    "swiftformat": {
+      "exitCode": 0,
+      "observation": "swiftformat Sources Tests --lint: 0/39 files require formatting; config at .swiftformat honored."
+    },
+    "swiftlint": {
+      "exitCode": 0,
+      "observation": "swiftlint --strict: 0 violations, 0 serious in 39 files."
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 0,
+    "passedWithNonBlocking": 5,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "M1-git-engine",
+      "file": "Sources/Git/Git.swift",
+      "line": 55,
+      "description": "Git.run reads stdout/stderr via readToEnd() in the terminationHandler only — does NOT drain concurrently despite the inline comment claiming otherwise. Outputs >64 KB (git diff on large commits, git show, git log --patch) will pipe-buffer-deadlock the child. Fine for all M1 test callers (small outputs); must be fixed before M7-uncommitted-diff and M7-commit-diff ship. Either refactor Git.run to drain both pipes via readabilityHandler OR require M7 to use Git.stream."
+    },
+    {
+      "featureId": "M1-git-engine",
+      "file": "Sources/Git/Git.swift",
+      "line": 82,
+      "description": "onCancel closure can miss terminating the child if cancel fires between continuation setup and process.run() — the cancelFlag still causes the awaiter to see .cancelled but the subprocess runs to natural completion. M5-net-ops should audit this for fetch/push lifecycle expectations."
+    },
+    {
+      "featureId": "M1-git-engine",
+      "file": "Sources/Git/GitError.swift",
+      "line": 5,
+      "description": "GitError lacks a case for push-specific hook rejection / protected-branch / no-such-ref errors that M5-net-ops will need. Add .remoteRejected(String) before M5 lands."
+    },
+    {
+      "featureId": "M1-git-parsers",
+      "file": "Sources/Git/Parsers/DiffParser.swift",
+      "line": 216,
+      "description": "extractDiffGitPaths does not handle git's quoted-path form for filenames with spaces. Known limitation; recommend logging this in library/git-cli-integration.md so M7 picks it up, and emitting a Logger warning at the extract site so silent drops are observable."
+    },
+    {
+      "featureId": "M1-git-parsers",
+      "file": "Sources/Git/Parsers/ProgressParser.swift",
+      "line": 40,
+      "description": "consume(_:) only returns the LAST event per chunk — intermediate percent updates are lost to the caller. For M5-fetch driving a smooth progress bar, consider adding consumeAll(_:) -> [ProgressEvent] or switching to a callback/AsyncStream shape."
+    },
+    {
+      "featureId": "M1-git-parsers",
+      "file": "Sources/Git/Parsers/LogParser.swift",
+      "line": 59,
+      "description": "Uses the Swift 5.10+ if-expression syntax. project.yml sets SWIFT_VERSION=5.9 but Xcode 16's toolchain ships Swift 5.10, so it compiles today. Bump project.yml to 5.10 or rewrite as ternary for strict-5.9 portability."
+    },
+    {
+      "featureId": "M1-git-parsers",
+      "file": "Sources/Git/Models/RefKind.swift",
+      "line": 12,
+      "description": "RefKind.head case is defined but never produced (ForEachRefParser filters HEAD out). Remove or document the intended consumer."
+    },
+    {
+      "featureId": "M1-persistence",
+      "file": "Sources/Persistence/Keys.swift",
+      "line": 27,
+      "description": "9 per-field persistence keys declared but unused. If a future feature binds via @AppStorage to any of them, it will drift from the aggregate blob silently. Pick a strategy (remove the unused keys OR write both) and document in AGENTS.md before M5-auto-fetch."
+    },
+    {
+      "featureId": "M1-persistence",
+      "file": "Sources/Persistence/PersistenceStore.swift",
+      "line": 160,
+      "description": "load()/write() swallow errors silently with only a code comment. Add os.Logger.error calls so corrupt-blob recovery and encode failures are observable in Console. Zero cost when they don't fire."
+    },
+    {
+      "featureId": "M1-persistence",
+      "file": "Sources/Persistence/PersistenceStore.swift",
+      "line": 105,
+      "description": "setWindowFrame saves on every call. Window resize produces many calls per second. Debounce before M8 binds this to live window-resize events."
+    },
+    {
+      "featureId": "M1-fs-watcher",
+      "file": "Sources/Repo/FSWatcher.swift",
+      "line": 88,
+      "description": "stop() is terminal — start() on a stopped watcher is a silent no-op. Surprising API; prefer throwing WatcherError.alreadyStopped so a caller that hits this gets a loud signal rather than a missed refresh."
+    },
+    {
+      "featureId": "M1-fs-watcher",
+      "file": "Sources/Repo/FSWatcher.swift",
+      "line": 24,
+      "description": "@unchecked Sendable justification is not in a doc-comment. Defensible choice over an actor (C callback can't await into one), but the next reviewer shouldn't have to re-litigate. One sentence explaining the tradeoff."
+    },
+    {
+      "featureId": "M1-project-scaffold",
+      "file": "README.md",
+      "line": 38,
+      "description": "Documents the old swiftformat flag order (`swiftformat --lint Sources Tests`). swiftformat 0.61+ requires paths before flags. Handoff flagged this for fix but README was not updated. Every future worker copying from README will hit it."
+    },
+    {
+      "featureId": "M1-project-scaffold",
+      "file": "Sources/App/Commands.swift",
+      "line": 11,
+      "description": "EmptyCommands replaces .newItem without offering a replacement. Silently removes the default ⌘N binding that VAL-UI-009 depends on. M8-commands-and-menu must restore it. Leave a comment pointer so M8 doesn't miss it."
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "file": "AGENTS.md",
+      "change": "Add a section under Conventions → Naming: 'The Codable persistence root is `KiteSettings`, not `Settings`, because SwiftUI's `Settings` scene type is imported by KiteApp.swift and collides. When adding any Settings-related view types in later features, use `SettingsRootsTab`, `SettingsGeneralTab`, etc. rather than bare `SettingsView` to avoid compounding the clash.'",
+      "rationale": "M1-persistence hit this and renamed; M2-settings-roots will hit it again for the real Settings scene body. Codify now."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Add a known gotcha under 'Git CLI': 'Git.run captures stdout/stderr only after process termination via readToEnd(). This is safe for any git command whose combined output stays under ~64 KB (pipe-buffer size). For large-output commands — `git diff`, `git show`, `git log --patch`, `git archive` — use Git.stream or refactor Git.run to drain pipes via readabilityHandler. Do NOT assume Git.run scales to diff-sized outputs.'",
+      "rationale": "Latent deadlock for any M7 diff caller. Document the boundary until Git.run is reworked."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Add to Services or Shared state rules: 'Whenever a feature swallows an error (corrupt UserDefaults, failed JSON encode, file-system missing parent, etc.), log it via `os.Logger(subsystem: \"nl.rb2.kite\", category: <area>).error(...)` so the failure is observable. Silent swallows are never acceptable; swallow + log is.'",
+      "rationale": "PersistenceStore swallows twice today with only comments. The precedent will spread unless codified."
+    },
+    {
+      "file": "skills/git-engine-worker/SKILL.md",
+      "change": "Document the 'stateless parser = enum, stateful stream consumer = final class' pattern used across M1-git-parsers. Example: BranchParser / LogParser / StatusParser / ForEachRefParser / DiffParser are enums with static parse(); ProgressParser is a final class because of carry-buffer + last-emitted dedup across chunks. Codify so M4-graph-layout (stateless) / M5 progress parser extensions / M6 branch-name validator pick the right shape.",
+      "rationale": "Five features will produce parsers / validators in coming milestones. Without a pattern, they drift."
+    },
+    {
+      "file": "library/git-cli-integration.md",
+      "change": "Add a 'Known parser limitations' subsection: (1) DiffParser does not handle git's quoted-path form for filenames with embedded spaces — a quoted `diff --git \"a/foo bar\" \"b/foo bar\"` header causes the file-path extraction to silently return nil and the file's paths stay unset. M7-uncommitted-diff and M7-commit-diff must extend DiffParser.extractDiffGitPaths before shipping in repos with space-in-filename diffs.",
+      "rationale": "Deferred work needs a parking spot so M7 workers don't rediscover it at runtime."
+    },
+    {
+      "file": "INTERFACES.md",
+      "change": "Add under §4 Shared state rules: 'FSWatcher instances are one-shot — call start() once, stop() once. Do not attempt to start a stopped watcher. When switching focused repos, create a fresh FSWatcher rather than restarting the existing one.'",
+      "rationale": "FSWatcher.start() is a silent no-op after stop(). M3-repo-focus-lifecycle (the primary consumer) needs to know this explicitly."
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilledThisMilestone": [
+      "VAL-UI-001",
+      "VAL-PKG-004",
+      "VAL-NET-008",
+      "VAL-NET-010",
+      "VAL-PARSE-001",
+      "VAL-PARSE-002",
+      "VAL-PARSE-003",
+      "VAL-PARSE-004",
+      "VAL-PARSE-005",
+      "VAL-PARSE-006",
+      "VAL-PARSE-007",
+      "VAL-SEC-002",
+      "VAL-SEC-003",
+      "VAL-SEC-004",
+      "VAL-SEC-005",
+      "VAL-SEC-006",
+      "VAL-SEC-007",
+      "VAL-REPO-010",
+      "VAL-PERSIST-001",
+      "VAL-PERSIST-002",
+      "VAL-PERSIST-003",
+      "VAL-PERSIST-004",
+      "VAL-PERSIST-005"
+    ],
+    "anyOrphansOrFailures": [
+      {
+        "assertion": "VAL-GRAPH-010",
+        "status": "partial",
+        "note": "M1-fs-watcher provides the refresh-event mechanism, but scroll-position preservation is owned by M4-graph-scroll-container. Listed as partial in the feature handoff, correctly."
+      },
+      {
+        "assertion": "VAL-SEC-001",
+        "status": "implicitly-fulfilled",
+        "note": "grep over Sources/ for `force`, `--force`, `--force-with-lease` returns zero hits in any Process argument list. Explicit VAL-SEC-001 fulfillment is scoped to M5-pull-push per features.json but the invariant holds at M1 (there is simply no push code yet to offend it)."
+      }
+    ]
+  },
+  "previousRound": null
+}

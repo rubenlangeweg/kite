@@ -1,0 +1,59 @@
+{
+  "featureId": "M1-fs-watcher",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Reviewed Sources/Repo/FSWatcher.swift and Tests/KiteTests/RepoTests/FSWatcherTests.swift (5 cases). FSEvents stream is created with kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer, scheduled on a dedicated serial queue, and torn down via Stop→Invalidate→Release under a stateLock. 500 ms DispatchWorkItem debounce is layered on top of the 50 ms FSEvents kernel coalesce, giving a predictable quiet-period contract. onChange is typed `@MainActor () -> Void` and invoked via `Task { @MainActor in ... }` — Swift 6.2 concurrency would reject a non-main call site. Pre-existence path check rejects bogus paths eagerly (FSEventStreamCreate accepts them silently). Burst test writes 10 files back-to-back and asserts exactly one callback. Two design choices are worth surfacing for later milestones but are non-blocking.",
+    "issues": [
+      {
+        "file": "Sources/Repo/FSWatcher.swift",
+        "line": 24,
+        "severity": "non-blocking",
+        "description": "`@unchecked Sendable` is load-bearing: stateLock-guarded mutation of stream / pendingWork / isStopped plus an @escaping non-Sendable closure field (`onChange: @MainActor () -> Void`). Converting to an actor would be cleaner but has a real cost: the C FSEventStreamCallback trampoline (line 206) can't call into an actor-isolated method synchronously, so you'd end up with `Task { await watcher.handleRawEvent() }` in the callback — that's a heavier scheduling path per raw FSEvent (which can fire 10–100 times per debounce window on a busy repo). The current @unchecked Sendable approach is defensible. Recommend adding a one-line doc comment on the class stating why actor was rejected so the next reviewer doesn't re-litigate."
+      },
+      {
+        "file": "Sources/Repo/FSWatcher.swift",
+        "line": 88,
+        "severity": "non-blocking",
+        "description": "stop() sets isStopped = true and subsequent start() becomes a no-op (per handoff: 'not restartable by design'). This is surprising API — callers would typically expect `stop()` then `start()` to re-arm. The handoff says 'M2/M3 should treat the watcher as one-shot per focused repo and instantiate a new FSWatcher when switching repos.' Fine, but the class's start() should arguably `throw` or `fatalError` on a stopped watcher instead of silently no-op'ing — a silent no-op plus a missed refresh on a repo is a very annoying bug to track down later. Recommend either a thrown error (`WatcherError.alreadyStopped`) or a log line at the silent-start site."
+      },
+      {
+        "file": "Sources/Repo/FSWatcher.swift",
+        "line": 190,
+        "severity": "non-blocking",
+        "description": "`Task { @MainActor in self.onChange() }` in the DispatchWorkItem holds `self` strongly (the workitem captures `self` weakly via `[weak self]`, then the inner Task re-captures self strongly via `self.onChange`). For a stopped + deinit'd watcher, if the DispatchWorkItem's cancellation raced with fire-time, this Task would resurrect a self that was about to be released. The `stopped` re-check on line 186 mitigates this, but note that `handleRawEvent` always schedules a new work item even if the immediate state is consistent — the weak capture on line 179 is the primary guard. Current behaviour is safe; the threading model is subtle enough that a single sentence describing the ownership contract at the class top would help future readers."
+      },
+      {
+        "file": "Tests/KiteTests/RepoTests/FSWatcherTests.swift",
+        "line": 38,
+        "severity": "non-blocking",
+        "description": "`testWatcherFiresOnFileCreation` asserts `counter.value >= 1` (at least one callback). Given that test timing includes a 2s sleep after one write, and FSEvents can deliver a spurious event at subscription time on some macOS versions, `>= 1` is forgiving. Consider asserting `== 1` like the burst-coalesce test does, since exactly-one is the real contract. If spurious startup events are observed, document them explicitly rather than accepting them via `>=`."
+      },
+      {
+        "file": "Tests/KiteTests/RepoTests/FSWatcherTests.swift",
+        "line": 170,
+        "severity": "non-blocking",
+        "description": "CallbackCounter is `@unchecked Sendable` with NSLock. Fine. But it is declared `final class CallbackCounter` without access control (defaults to internal) inside the test module — and it is only used in this one file. Consider `fileprivate final class CallbackCounter` so future RepoTests cases don't grab it by accident and tangle their state."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "FSWatcher adopts the pattern: raw callback → dedicated serial queue → debounce work item → MainActor hop. This is the right shape for every FS/network event source in the app. M3-repo-focus-lifecycle should reuse the pattern verbatim when it wires GitQueue's completion notifications to the UI.",
+      "evidence": "Sources/Repo/FSWatcher.swift:168-201"
+    },
+    {
+      "area": "skills",
+      "observation": "The handoff flags that the user-level coalesce adds a tiny async hop on top of FSEvents' 50 ms kernel coalesce, landing at 'coalesceMillis + ~1 ms.' M4-graph-scroll-container needs to preserve scroll position across this hop — if it uses `.onChange(of: refreshTick)` the scroll is captured after the refresh which may race. Note the observable-timeline in the M4 brief explicitly.",
+      "evidence": "Sources/Repo/FSWatcher.swift:7-17 doc-comment, handoff M1-fs-watcher discoveredIssues[1]"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-REPO-010"
+    ],
+    "unverified": [
+      "VAL-GRAPH-010"
+    ]
+  }
+}

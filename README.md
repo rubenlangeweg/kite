@@ -35,7 +35,7 @@ Xcode.app. Every `xcodebuild` invocation must set `DEVELOPER_DIR` explicitly:
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 xcodebuild -scheme Kite -configuration Debug build
 xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug
-swiftformat --lint Sources Tests
+swiftformat Sources Tests --lint   # swiftformat 0.61+ requires paths BEFORE --lint
 swiftlint --strict
 ```
 

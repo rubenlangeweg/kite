@@ -1,0 +1,61 @@
+{
+  "featureId": "M1-persistence",
+  "salientSummary": "Added Sources/Persistence/{Keys,Settings,PersistenceStore}.swift and 9 Swift Testing cases under Tests/KiteTests/PersistenceTests/PersistenceStoreTests.swift. PersistenceStore is an @Observable @MainActor façade over a single JSON blob in UserDefaults (key nl.rb2.kite.settings). All 72 KiteTests green (63 preserved + 9 new). Validation gate (xcodegen, xcodebuild build, xcodebuild test, swiftformat --lint, swiftlint --strict) all exit 0. VAL-PERSIST-001 through VAL-PERSIST-005 fulfilled at the API/unit level; UI wiring into the App scene is deferred to M2 as the brief instructs.",
+  "whatWasImplemented": "Three source files: (1) Sources/Persistence/Keys.swift — `enum PersistenceKeys` with `settingsBlob = \"nl.rb2.kite.settings\"` (the live aggregate-blob key used by the store) and per-field keys (`pinnedRepos`, `extraRoots`, `lastOpenedRepo`, `lastSelectedBranch`, `windowFrame`, `sidebarWidth`, `detailWidth`, `autoFetchEnabled`, `schemaVersion`) declared but unused — reserved as a single source of truth for future @AppStorage-style bindings, per INTERFACES.md §4 \"no inline key string literals\" rule. (2) Sources/Persistence/Settings.swift — `struct KiteSettings: Codable, Equatable` with every persisted field (schemaVersion, pinnedRepos, extraRoots, lastOpenedRepo, lastSelectedBranch map, windowFrame, sidebarWidth, detailWidth, autoFetchEnabled), plus `static let current = 1` and `static var default: KiteSettings` for a canonical first-launch value (autoFetchEnabled=true, everything else empty/nil). Also `struct CGRectValue: Codable, Equatable` with `init(_ CGRect)` and `var cgRect` — a hand-written wrapper chosen over bare CGRect so the on-disk JSON shape is explicit and stable across Swift/CoreGraphics versions. Named `KiteSettings` (not `Settings`) to avoid a name clash with `SwiftUI.Settings` in `Sources/App/KiteApp.swift` (which I don't own per the feature brief). (3) Sources/Persistence/PersistenceStore.swift — `@Observable @MainActor final class PersistenceStore` with `init(defaults: UserDefaults = .standard)` that eagerly calls a static `load(from:)`. Load returns `(KiteSettings, persistDefaults: Bool)`: if the blob key is missing, or decode fails (corrupt data), defaults are returned with a flag telling the caller to flush them back. Writes go through `write(_:to:)` with `JSONEncoder`. The migration hook is `migrate(_ Data) throws -> KiteSettings`: it first decodes a `SchemaProbe` to read `schemaVersion`, then dispatches on it — `KiteSettings.current` performs a full decode, anything else throws `MigrationError.unsupportedSchemaVersion` (which load() catches into a reset-to-defaults branch). Typed mutators: `pin(_:)` (dedups, preserves order), `unpin(_:)`, `addExtraRoot(_:) throws` (checks path exists AND is a directory via FileManager.fileExists(atPath:isDirectory:), throws `ExtraRootError.pathDoesNotExist` / `.notADirectory`), `removeExtraRoot(_:)`, `setLastOpenedRepo(_:)`, `setLastSelectedBranch(_:forRepo:)`, `setWindowFrame(_: CGRect)` (wraps into CGRectValue), `setSidebarWidth(_:)`, `setDetailWidth(_:)`, `setAutoFetchEnabled(_:)`. All mutators call `save()` synchronously. Tests live under Tests/KiteTests/PersistenceTests/PersistenceStoreTests.swift: each creates a fresh `UserDefaults(suiteName: \"test-\" + UUID().uuidString)` and tears it down via `removePersistentDomain(forName:) + synchronize()` in a deferred closure, so no state leaks into `.standard` and parallel runs are safe.",
+  "whatWasLeftUndone": "Wiring `PersistenceStore` into `Sources/App/KiteApp.swift` via `.environment()` / custom EnvironmentKey, and any UI consumption (Settings scene Roots tab, sidebar pinned section), are deferred to M2-repo-sidebar and M2-settings-roots per the feature brief's explicit ownership note. VAL-PERSIST-001..004 are therefore fulfilled at the API/unit level for this feature (round-trip and mutator coverage prove the persistence semantics); the end-to-end XCUITest relaunch flows are owned by M2/M8 user-testing validators.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Regenerated Kite.xcodeproj picking up Sources/Persistence/** and Tests/KiteTests/PersistenceTests/** via directory scanning." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build (DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer)", "exitCode": 0, "observation": "BUILD SUCCEEDED. First attempt surfaced a name clash ('Settings' vs SwiftUI.Settings in KiteApp.swift); renamed the type to KiteSettings and rebuilt clean." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests", "exitCode": 0, "observation": "72 tests in 11 suites passed in 12.742s. Suites: BranchParser (7), DiffParser (7), ErrorClassifier (13), FSWatcher (5), ForEachRefParser (6), Git.run / Git.stream (10), LogParser (7), PersistenceStore (9, new), ProgressParser (8), StatusParser (6), Kite scaffold smoke (2). 9 new PersistenceStore + 63 preserved = 72." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests/PersistenceStoreTests", "exitCode": 0, "observation": "9 of 9 passed in 0.028s. Timings: defaultSettingsOnFirstLaunch=0.002s, roundTripAllFields=0.003s, pinAndUnpin=0.002s, addExtraRootRejectsNonExistent=0.002s, addExtraRootRejectsNonDirectory=0.003s, schemaVersionPresentAndMigrationNoOpForCurrentVersion=0.002s, missingKeyReturnsDefaults=0.002s, lastSelectedBranchPerRepo=0.002s, unparseableBlobFallsBackToDefaults=0.002s." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/39 files require formatting. Two fixes applied pre-lint: remove redundant explicit Sendable conformance on internal structs (KiteSettings, CGRectValue) and drop redundant explicit `self.` in non-overlapping-parameter initializers (CGRectValue.init(_ CGRect), PersistenceStore.init)." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Done linting! Found 0 violations, 0 serious in 39 files." }
+    ],
+    "interactiveChecks": [
+      { "description": "Verify single-blob persistence: the store reads/writes only `PersistenceKeys.settingsBlob` (\"nl.rb2.kite.settings\"). The remaining per-field keys in PersistenceKeys are declared but never referenced inside PersistenceStore.swift — confirmed via grep.", "result": "Verified. `grep -n PersistenceKeys. Sources/Persistence/PersistenceStore.swift` returns only `.settingsBlob` references." },
+      { "description": "Verify first-launch persist-through: after `init` on a fresh suite, the blob key is present — so the next launch hits the fast decode path rather than the missing-key fallback. `testMissingKeyReturnsDefaults` asserts exactly this.", "result": "Passed." },
+      { "description": "Verify corrupt-blob recovery: seed garbage bytes at the blob key, construct PersistenceStore, observe defaults returned and garbage overwritten with a valid defaults JSON. `testUnparseableBlobFallsBackToDefaults` asserts both halves.", "result": "Passed." },
+      { "description": "Verify test isolation: each test uses `UserDefaults(suiteName: \"test-\" + UUID().uuidString)` and tears down via `removePersistentDomain(forName:) + synchronize()` in `defer`. No touching of `.standard`; safe under Swift Testing's parallel execution.", "result": "Verified via source inspection of Tests/KiteTests/PersistenceTests/PersistenceStoreTests.swift `makeDefaults()` helper." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/PersistenceTests/PersistenceStoreTests.swift",
+        "cases": [
+          { "name": "first-launch load returns canonical defaults", "verifies": "VAL-PERSIST-005" },
+          { "name": "every field survives save-then-reload into a fresh store", "verifies": "VAL-PERSIST-001, VAL-PERSIST-002, VAL-PERSIST-003, VAL-PERSIST-004" },
+          { "name": "pin is idempotent and unpin removes", "verifies": "VAL-PERSIST-001" },
+          { "name": "addExtraRoot throws on non-existent path", "verifies": "VAL-PERSIST-002" },
+          { "name": "addExtraRoot throws when the path is a regular file", "verifies": "VAL-PERSIST-002" },
+          { "name": "schemaVersion is persisted as KiteSettings.current and migration is a no-op on load", "verifies": "VAL-PERSIST-005" },
+          { "name": "brand-new suite returns defaults and writes them back for the next load", "verifies": "VAL-PERSIST-005" },
+          { "name": "last-selected branch is stored and recovered per repo", "verifies": "VAL-PERSIST-003" },
+          { "name": "unparseable blob triggers a silent fallback to defaults", "verifies": "VAL-PERSIST-005" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "The spec brief uses the type name `Settings`, but that clashes with `SwiftUI.Settings` used as a Scene in Sources/App/KiteApp.swift (owned by M1-project-scaffold). Rather than modify a file outside my ownership, I renamed the Codable root struct to `KiteSettings`. M2-settings-roots — which adds a real SwiftUI Settings scene — should import the persistence store via `PersistenceStore.settings: KiteSettings`.",
+      "affectsFeature": "M2-settings-roots, M2-repo-sidebar"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "`PersistenceStore` is annotated `@Observable @MainActor`. Any consumer that wants to mutate settings from a background context (e.g. after an off-main scan completes) must `await MainActor.run { store.pin(path) }` or hop via a Task. This matches library/swiftui-macos.md §4.4 guidance — flagging it here so M2-repo-sidebar and M2-repo-scan wire the boundary correctly.",
+      "affectsFeature": "M2-repo-sidebar, M2-repo-scan"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "The per-field keys in `PersistenceKeys` (pinnedRepos, extraRoots, autoFetchEnabled, etc.) are declared but NOT currently used by PersistenceStore — the whole payload is one aggregate JSON blob under `settingsBlob`. They remain as a registry for future `@AppStorage` bindings on trivial scalars (e.g. the auto-fetch toggle in Settings > General could bind to the declared `autoFetchEnabled` key without going through PersistenceStore). If a later feature elects to bind via @AppStorage on a scalar, it MUST also update PersistenceStore so the aggregate blob stays in sync — otherwise the two stores will drift. Document the decision site in that feature's PR.",
+      "affectsFeature": "M5-auto-fetch, M2-settings-roots"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "`Settings.windowFrame` is encoded via a hand-written `CGRectValue` wrapper (x/y/width/height Doubles). `CGRect` itself appears to be Codable on macOS 15, but its synthesized key names are CoreFoundation-internal and have drifted historically across SDKs. The wrapper keeps the JSON shape stable and human-readable. No VAL-* currently inspects the on-disk JSON, so this is purely hygienic."
+    }
+  ]
+}

@@ -87,6 +87,7 @@ The orchestrator re-plans either a collaboration or a routing change.
 
 - Workers **read** `AGENTS.md` before starting any feature.
 - Workers do not modify `INTERFACES.md`, `AGENTS.md`, `mission.md`, `features.json`, or `validation-contract.md`. Only the orchestrator does.
+- **`FSWatcher` is one-shot.** Call `start()` once, `stop()` once. Do not attempt to start a stopped watcher — it is a silent no-op. When switching focused repos (M3-repo-focus-lifecycle), create a **fresh** `FSWatcher` instance rather than restarting the existing one.
 - Workers read `library/*.md` freely for reference.
 - New reference-worthy findings go to `library/` with an orchestrator PR.
 - **Environment variables required by `Process`:** `GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0`, `LC_ALL=C`. `SSH_AUTH_SOCK` inherited from parent env. Never export credentials into the process env.
