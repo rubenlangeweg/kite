@@ -1,0 +1,37 @@
+{
+  "featureId": "M2-repo-scan",
+  "salientSummary": "RepoScanner implemented as a pure-FS, depth-1 scanner parallelized across roots. Detects work-tree repos (.git dir or gitlink file) and bare repos (HEAD + objects/ signature) without shelling out per directory. Missing roots are logged and skipped. 10 Swift Testing cases green; full suite now 82/82. VAL-REPO-001, VAL-REPO-002, VAL-REPO-005, VAL-REPO-006 fulfilled.",
+  "whatWasImplemented": "Added Sources/Repo/DiscoveredRepo.swift — struct with url, displayName, rootPath, isBare, Identifiable by url. Added Sources/Repo/RepoScanner.swift — enum namespace with static async scan(roots:) parallelizing per-root enumeration via TaskGroup (preserving caller-provided root order in the flat result), and static isRepo(URL) -> RepoKind? classifier using FileManager only. Added RepoKind enum (.workTree / .bare). Missing/non-directory roots and enumeration errors emit os.Logger errors under subsystem nl.rb2.kite category 'repo' and return empty slices, never throw. Within a root, repos are sorted by displayName case-insensitively for deterministic sidebar ordering. Added Tests/KiteTests/RepoTests/RepoScannerTests.swift covering all mandated cases: simple scan, non-repo exclusion, bare detection, missing root, multi-root grouping, isRepo classification (3 variants), deterministic ordering, and a 50-repo perf smoke (<500ms).",
+  "whatWasLeftUndone": "No wiring to PersistenceStore or AppModel — explicitly out of scope; M2-repo-sidebar will consume RepoScanner.scan(roots:) from a ViewModel.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Project regenerated; Sources/Repo picks up new files via directory scanning." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED, no warnings." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests", "exitCode": 0, "observation": "82 of 82 tests passed (12 suites) in 19.4s; previous 72 still green, 10 new RepoScanner cases added." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/42 files require formatting." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "0 violations across 42 files." }
+    ],
+    "interactiveChecks": []
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/RepoTests/RepoScannerTests.swift",
+        "cases": [
+          { "name": "scansSimpleRoot", "verifies": "VAL-REPO-001" },
+          { "name": "ignoresNonRepoDirectories", "verifies": "VAL-REPO-002" },
+          { "name": "detectsBareRepos", "verifies": "VAL-REPO-006" },
+          { "name": "skipsMissingRoot", "verifies": "VAL-REPO-005" },
+          { "name": "handlesMultipleRoots", "verifies": "VAL-REPO-001" },
+          { "name": "isRepoDetectsWorkTree", "verifies": "VAL-REPO-001" },
+          { "name": "isRepoDetectsBare", "verifies": "VAL-REPO-006" },
+          { "name": "isRepoReturnsNilForNonRepo", "verifies": "VAL-REPO-002" },
+          { "name": "deterministicOrderingWithinRoot", "verifies": "VAL-REPO-001" },
+          { "name": "perfUnder200ms", "verifies": "VAL-REPO-001" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [],
+  "commit": "487f39d"
+}

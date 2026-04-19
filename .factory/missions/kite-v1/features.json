@@ -164,7 +164,8 @@
         "VAL-REPO-005",
         "VAL-REPO-006"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "487f39d"
     },
     {
       "id": "M2-repo-sidebar",
@@ -190,7 +191,8 @@
         "VAL-UI-007",
         "VAL-UI-010"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "4367812"
     },
     {
       "id": "M2-settings-roots",
@@ -214,7 +216,8 @@
         "VAL-REPO-005",
         "VAL-UI-008"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "b8ba30d"
     },
     {
       "id": "M3-branch-list",

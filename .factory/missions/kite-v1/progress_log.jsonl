@@ -27,3 +27,11 @@
 {"event":"fix_features_queued","items":["M1-fix-git-run-drain (pre-M7)","M1-fix-git-error-push-cases (pre-M5)","M1-fix-progress-consume-all (pre-M5)"],"timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_user_testing_skipped","milestone":"foundation","reason":"Foundation features are API/unit-level; scrutiny covered VAL-SEC grep audit; UI-visible user testing begins at M2-repo-sidebar","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_complete","milestone":"foundation","testsGreen":72,"commits":5,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_start","milestone":"repo-list","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M2-repo-scan","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M2-repo-scan","status":"completed","commit":"487f39d","testsAdded":10,"totalTestsGreen":82,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M2-repo-sidebar","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M2-repo-sidebar","status":"completed","commit":"4367812","testsAdded":13,"totalTestsGreen":95,"xcuiTestsAuthored":5,"xcuiTestsRun":0,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M2-settings-roots","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M2-settings-roots","status":"completed","commit":"b8ba30d","testsAdded":12,"totalTestsGreen":107,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_features_complete","milestone":"repo-list","featuresCompleted":3,"totalTestsGreen":107,"timestamp":"2026-04-19T00:00:00Z"}
