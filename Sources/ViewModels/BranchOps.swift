@@ -9,9 +9,11 @@ import OSLog
 ///   - `createBranch(_:on:)` → `git switch -c <name>` against the focused repo.
 ///     Validates the name with `BranchNameValidator` first; a rejected name
 ///     never reaches `Process`.
-///   - `switchToLocal(_:on:)` → `git switch <name>` — stub for M6-switch-branch.
-///   - `switchToRemote(remote:branch:on:)` → `git switch -c <local> --track
-///     <remote>` — stub for M6-switch-branch.
+///   - `switchToLocal(_:on:)` → `git switch <name>` on the focused repo.
+///   - `switchToRemote(remote:branch:existingLocal:on:)` → if an existing local
+///     already tracks `<remote>/<branch>`, just `git switch` to it (caller
+///     passes the local shortName via `existingLocal`); otherwise
+///     `git switch -c <branch> --track <remote>/<branch>`.
 ///
 /// Design:
 ///   - Each op is serialised against the focused repo via `focus.queue.run`
@@ -28,7 +30,8 @@ import OSLog
 /// tree (VAL-SEC-001).
 ///
 /// Fulfills: VAL-BRANCHOP-001, VAL-BRANCHOP-002, VAL-BRANCHOP-003,
-/// VAL-BRANCHOP-006, VAL-SEC-007 (validator + argv Process).
+/// VAL-BRANCHOP-004, VAL-BRANCHOP-005, VAL-BRANCHOP-006,
+/// VAL-SEC-007 (validator + argv Process).
 @Observable
 @MainActor
 final class BranchOps {
@@ -73,11 +76,13 @@ final class BranchOps {
         )
     }
 
-    // MARK: - Switch (stubs for M6-switch-branch)
+    // MARK: - Switch
 
-    /// Run `git switch <name>` on the focused repo. Stub for M6-switch-branch;
-    /// M6-create-branch only needs the entry point to exist so downstream
-    /// callers (future `BranchListView` double-click) can compile.
+    /// Run `git switch <name>` on the focused repo.
+    ///
+    /// VAL-BRANCHOP-004: double-clicking a local branch drives this entry
+    /// point. Dirty-tree failures surface the documented copy; every other
+    /// classified failure falls through to the classified toast.
     @discardableResult
     func switchToLocal(_ name: String, on focus: RepoFocus) async -> Bool {
         await runSwitch(
@@ -89,16 +94,36 @@ final class BranchOps {
         )
     }
 
-    /// Run `git switch -c <local> --track <remote>/<branch>` on the focused
-    /// repo. Used when the user double-clicks a remote-tracking branch that
-    /// has no existing local. Stub for M6-switch-branch.
+    /// Switch to a remote-tracking branch, creating a local tracker if one
+    /// doesn't already exist.
+    ///
+    /// - If `existingLocal` is non-nil the caller has determined that a local
+    ///   branch (of that name) already tracks `<remote>/<branch>`, so we
+    ///   delegate to `switchToLocal` — avoids spawning `git switch -c` on a
+    ///   name that already exists (which would surface as "already exists").
+    /// - Otherwise run `git switch -c <branch> --track <remote>/<branch>`.
+    ///
+    /// The caller (view) computes `existingLocal` by scanning
+    /// `BranchListModel.local` for any branch whose `upstream` equals
+    /// `"\(remote)/\(branch)"`. Keeping the scan in the view keeps this
+    /// method's surface simple and branch-list-agnostic.
+    ///
+    /// VAL-BRANCHOP-005.
     @discardableResult
-    func switchToRemote(remote: String, branch: String, on focus: RepoFocus) async -> Bool {
+    func switchToRemote(
+        remote: String,
+        branch: String,
+        existingLocal: String?,
+        on focus: RepoFocus
+    ) async -> Bool {
+        if let existing = existingLocal {
+            return await switchToLocal(existing, on: focus)
+        }
         let trackingRef = "\(remote)/\(branch)"
         return await runSwitch(
             args: ["switch", "-c", branch, "--track", trackingRef],
             on: focus,
-            successMessage: "Switched to \(branch) tracking \(trackingRef)",
+            successMessage: "Switched to \(branch) (tracking \(trackingRef))",
             fallbackFailure: "Failed to switch to remote branch",
             logContext: "BranchOps.switchToRemote(\(trackingRef))"
         )

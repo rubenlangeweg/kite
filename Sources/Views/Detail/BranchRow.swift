@@ -7,12 +7,22 @@ import SwiftUI
 /// - current local branch is rendered with a filled blue dot + semibold name
 /// - every row has a leading branch SF Symbol
 /// - right-side pills render upstream status (ahead/behind, no upstream, gone)
+///
+/// The parent view can wire a double-click handler via `onDoubleClick` —
+/// `BranchListView` uses it to drive `BranchOps.switchToLocal` /
+/// `switchToRemote`. The gesture is attached as a `.simultaneousGesture`
+/// so it coexists with List's single-click row selection (VAL-BRANCHOP-004,
+/// VAL-BRANCHOP-005).
 struct BranchRow: View {
     let branch: Branch
 
     /// When true, render with secondary text colour. Passed by the view
     /// containing remote branches so they read as "tracked, not owned".
     var isRemote: Bool = false
+
+    /// Called on double-click. `nil` disables the gesture (used by the
+    /// `#Preview` and snapshot entry points).
+    var onDoubleClick: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -45,8 +55,26 @@ struct BranchRow: View {
         .padding(.vertical, 2)
         .contentShape(Rectangle())
         .help(helpText)
-        .accessibilityIdentifier("BranchRow.\(branch.shortName)")
+        .accessibilityIdentifier(accessibilityRowIdentifier)
         .accessibilityLabel(Text(accessibilityLabel))
+        // Double-click to switch. `.simultaneousGesture` so it stacks with
+        // List's single-click row selection rather than stealing the tap.
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded {
+                onDoubleClick?()
+            }
+        )
+    }
+
+    /// Accessibility identifier used by tests. Remote rows prefix with
+    /// `Remote.` so `origin/main` and a local `main` don't collide in
+    /// XCUITest element lookups. `branch.shortName` for a remote already
+    /// embeds the remote name (e.g. `origin/feature-x`).
+    private var accessibilityRowIdentifier: String {
+        if isRemote {
+            return "BranchRow.Remote.\(branch.shortName)"
+        }
+        return "BranchRow.\(branch.shortName)"
     }
 
     // MARK: - Pills

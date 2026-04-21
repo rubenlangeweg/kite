@@ -1,0 +1,54 @@
+{
+  "featureId": "M6-switch-branch",
+  "salientSummary": "Double-click to switch: BranchOps.switchToLocal / switchToRemote fleshed out; BranchListView wires row double-clicks to BranchOps with current-branch no-op and existing-tracking-local reuse; 5 new ViewModel tests against real fixture repos and 4 authored XCUITests; 219/219 KiteTests green (214 baseline + 5 new) under the M8 skip list; VAL-BRANCHOP-004, VAL-BRANCHOP-005, VAL-BRANCHOP-006 fulfilled.",
+  "whatWasImplemented": "Expanded Sources/ViewModels/BranchOps.swift: switchToLocal(_:on:) now runs `git switch <name>` via the existing runSwitch helper (serialised on focus.queue, classified errors, documented dirty-tree copy); switchToRemote(remote:branch:existingLocal:on:) gained the `existingLocal` hint parameter — when non-nil it delegates to switchToLocal (avoiding a spurious `git switch -c` on an existing local name), otherwise runs `git switch -c <branch> --track <remote>/<branch>`. The view computes `existingLocal` by scanning BranchListModel.local for a branch whose upstream equals `<remote>/<shortBranch>`. Expanded Sources/Views/Detail/BranchRow.swift with an `onDoubleClick: (() -> Void)?` prop wired through a `.simultaneousGesture(TapGesture(count: 2))` so List's single-click row selection still works alongside double-click-to-switch. Remote rows get a distinct accessibility identifier (`BranchRow.Remote.<shortName>`) to disambiguate from same-named local rows in XCUITests. Updated Sources/Views/Detail/BranchListView.swift to pull in @Environment(BranchOps.self), pass onDoubleClick closures to each BranchRow, and split into handleLocalDoubleClick (skips if branch.isHead — double-click on current is a no-op, never spawning a Process) and handleRemoteDoubleClick (strips the `<remote>/` prefix from refname:short, probes model.local for an existing tracker, then dispatches switchToRemote). FSEvents-driven refresh carries: `git switch` writes `.git/HEAD` → FSWatcher fires → BranchListView.onChange(focus.lastChangeAt) reloads the model and the current indicator moves. Tests: Tests/KiteTests/ViewModelTests/BranchOpsSwitchTests.swift — 5 Swift Testing cases using two real-git fixtures (plain local repo + bare-upstream + fresh clone) covering success, dirty-tree with documented copy, nonexistent target, remote tracking-local creation, and remote-reuse with no duplicate branch. Tests/KiteUITests/SwitchBranchUITests.swift — 4 XCUITests authored for double-click-local/remote/current-noop/dirty-tree (committed but not executed in this environment due to host TCC, same pattern as FetchUITests / CreateBranchUITests). Regenerated Kite.xcodeproj via xcodegen.",
+  "whatWasLeftUndone": "XCUITest suite Tests/KiteUITests/SwitchBranchUITests.swift is authored but not executed — macOS TCC still blocks XCUITest harness attachment on this host (same state as every prior milestone's XCUI suite). Snapshot tests were deliberately skipped — the view change is purely a gesture handler with no new visual surface and any snapshot would be degenerate vs. M3-branch-list's existing BranchListSnapshotTests. The existing BranchRow.<name> accessibility identifier widened from local-only to include a Remote.<shortName> form for remote rows; BranchListUITests already only looks up local rows by `BranchRow.<name>` so no existing test breaks, but any future remote-row lookup must use the new identifier.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Project regenerated cleanly after adding Tests/KiteTests/ViewModelTests/BranchOpsSwitchTests.swift and Tests/KiteUITests/SwitchBranchUITests.swift." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests/BranchOpsSwitchTests", "exitCode": 0, "observation": "5 of 5 tests passed in ~5s." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests", "exitCode": 0, "observation": "219 tests in 33 suites passed in ~106s (214 baseline from M6-create-branch + 5 new BranchOps.switch tests)." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/128 files require formatting." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Found 0 violations, 0 serious in 128 files." }
+    ],
+    "interactiveChecks": [
+      { "action": "UI verification deferred: XCUITest harness blocked by host TCC; authored suite Tests/KiteUITests/SwitchBranchUITests.swift is committed with 4 cases (testDoubleClickLocalBranchSwitches, testDoubleClickRemoteBranchCreatesTrackingLocal, testDoubleClickCurrentBranchNoOp, testDirtyTreeErrorToast). Unit-level behaviour for all 3 fulfilled VAL assertions (local switch, remote tracking-local creation + reuse, dirty-tree blocking) is fully covered by KiteTests/BranchOpsSwitchTests against real GitFixtureHelper repos (including a bare upstream + fresh clone pair for the remote flow).", "observed": "Not run interactively in this environment — called out explicitly per swiftui-worker SKILL step 8." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/ViewModelTests/BranchOpsSwitchTests.swift",
+        "cases": [
+          { "name": "switchToLocalSuccess", "verifies": "VAL-BRANCHOP-004" },
+          { "name": "switchToLocalDirtyTreeBlocks", "verifies": "VAL-BRANCHOP-006" },
+          { "name": "switchToLocalNonExistentBranch", "verifies": "VAL-BRANCHOP-004" },
+          { "name": "switchToRemoteCreatesTrackingLocal", "verifies": "VAL-BRANCHOP-005" },
+          { "name": "switchToRemoteReusesExistingLocal", "verifies": "VAL-BRANCHOP-005" }
+        ]
+      },
+      {
+        "file": "Tests/KiteUITests/SwitchBranchUITests.swift",
+        "cases": [
+          { "name": "testDoubleClickLocalBranchSwitches", "verifies": "VAL-BRANCHOP-004" },
+          { "name": "testDoubleClickRemoteBranchCreatesTrackingLocal", "verifies": "VAL-BRANCHOP-005" },
+          { "name": "testDoubleClickCurrentBranchNoOp", "verifies": "VAL-BRANCHOP-004" },
+          { "name": "testDirtyTreeErrorToast", "verifies": "VAL-BRANCHOP-006" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "SwitchBranchUITests is committed but not executed in this environment due to host TCC. Same state as CreateBranchUITests/FetchUITests/PullPushUITests/etc. from prior milestones — whenever host grants Automation + Accessibility, this suite should be un-gated and run alongside the others.",
+      "affectsFeature": "M8-release-packaging"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "BranchRow accessibility identifier for remote rows changed to `BranchRow.Remote.<shortName>` to disambiguate from local rows. No existing test references remote rows by identifier (BranchListUITests only asserts local `BranchRow.main` / `BranchRow.feature/a`), but future UI tests should use the new identifier form for remote lookups.",
+      "affectsFeature": "M8-commands-and-menu"
+    }
+  ]
+}
