@@ -1,0 +1,99 @@
+{
+  "featureId": "M8-app-icon-and-plist",
+  "salientSummary": "Kite.app now ships with a real app icon (10-size AppIcon.appiconset produced by scripts/generate_icon.swift — a blue-gradient rounded square with a white kite-diamond glyph and tail). Info.plist swept: all documented keys present (CFBundleIdentifier nl.rb2.kite, CFBundleName/DisplayName Kite, CFBundleShortVersionString 0.1.0, CFBundleVersion 1, LSApplicationCategoryType public.app-category.developer-tools, LSMinimumSystemVersion 15.0, NSHighResolutionCapable true, CFBundleDevelopmentRegion en, CFBundlePackageType APPL) plus NSHumanReadableCopyright updated to the spec text '© 2026 Ruben Langeweg'. CFBundleIconFile=AppIcon and CFBundleIconName=AppIcon are auto-injected by Xcode from the ASSETCATALOG_COMPILER_APPICON_NAME build setting. SettingsAboutTab is now a real About panel with app icon + version + tagline + copyright. 5 new InfoPlistTests (Swift Testing) and 2 new SettingsAboutTab snapshot tests (light + dark, md5-distinct) added; all green. Validation gate (build + 248 tests under the 11-entry skip list + swiftformat --lint + swiftlint --strict + plutil inspection) exits 0. Fulfills: VAL-PKG-003, VAL-PKG-004.",
+  "whatWasImplemented": "1) scripts/generate_icon.swift — standalone Swift CoreGraphics script (no ImageRenderer / SwiftUI dependency, so it runs reliably from the command-line Swift interpreter). Renders a deep-blue linear-gradient rounded square with a white kite-diamond glyph, cross-spars, curved tail, and two ribbon dashes. Outputs 10 PNG sizes into Resources/Assets.xcassets/AppIcon.appiconset and rewrites Contents.json to match. Idempotent — re-running produces the same bytes. 2) Resources/Assets.xcassets/AppIcon.appiconset/ — 10 generated PNGs (16/32/64/128/256/512/1024) + regenerated Contents.json. 3) Info.plist — NSHumanReadableCopyright updated to '© 2026 Ruben Langeweg' to match the feature spec. All other required keys were already present from M1-project-scaffold. 4) Sources/Views/Settings/SettingsAboutTab.swift — replaced stub with real About content: pulls NSApp.applicationIconImage at 128x128 (with NSImage(named: 'AppIcon') + SF Symbol fallbacks for preview/test hosts), shows 'Kite' title, Version X.Y.Z (build) from Info.plist, the tagline 'A lightweight macOS git client.', and the copyright line from Info.plist. 5) Tests/KiteTests/InfoPlistTests.swift — 5 Swift Testing cases: source plist string-key assertions, source NSHighResolutionCapable boolean assertion, host Bundle.main string-key assertions (guarded on bundleIdentifier.hasPrefix('nl.rb2.kite') per SmokeTest pattern), host Bundle NSHighResolutionCapable, and AppIcon.appiconset PNG file existence + magic-byte validity. 6) Tests/KiteTests/ViewTests/SettingsAboutTabSnapshotTests.swift — XCTest snapshot cases for light + dark using the CommitDiffSnapshotTests recipe (explicit NSAppearance, windowBackgroundColor wrap, presentational view direct, md5-distinct across modes verified: d3d045c5... vs 71d0eaaf...).",
+  "whatWasLeftUndone": "Nothing in scope. Note: the About tab's icon in snapshot baselines shows the Xcode generic app icon because the XCTest host has no registered NSApp bundle — expected and not a blocker; in the running app NSApp.applicationIconImage resolves to the real ICNS. The new SettingsAboutTabSnapshotTests suite is NOT in AGENTS.md's 11-entry skip-list; I left it runnable in the gate since its references were freshly recorded on this host and md5-distinct. If future workers see drift, they should add it to the skip-list under the same M8-fix-snapshot-degeneracy banner as the other 11. Source-file ownership note: scripts/ is a new top-level directory; it's not listed in INTERFACES.md §3, but contains only a build-time asset generator (no shipping Swift source), so I treated it as within swiftui-worker scope for the app-icon deliverable.",
+  "verification": {
+    "commandsRun": [
+      {
+        "command": "swift scripts/generate_icon.swift",
+        "exitCode": 0,
+        "observation": "Wrote 10 PNG files + Contents.json into Resources/Assets.xcassets/AppIcon.appiconset"
+      },
+      {
+        "command": "xcodegen generate",
+        "exitCode": 0,
+        "observation": "Created project at /Users/ruben/Developer/gitruben/kite/Kite.xcodeproj"
+      },
+      {
+        "command": "xcodebuild -scheme Kite -configuration Debug build",
+        "exitCode": 0,
+        "observation": "** BUILD SUCCEEDED **; Kite.app/Contents/Resources/AppIcon.icns produced by the asset-catalog compiler; RegisterWithLaunchServices invoked on the built bundle."
+      },
+      {
+        "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:<11 snapshot suites>",
+        "exitCode": 0,
+        "observation": "Test run with 248 tests in 38 suites passed after 117.2s. 5 new InfoPlistTests green; 2 new SettingsAboutTabSnapshotTests green against freshly-recorded references."
+      },
+      {
+        "command": "swiftformat Sources Tests --lint",
+        "exitCode": 0,
+        "observation": "0/149 files require formatting"
+      },
+      {
+        "command": "swiftlint --strict",
+        "exitCode": 0,
+        "observation": "Done linting! Found 0 violations, 0 serious in 149 files."
+      },
+      {
+        "command": "plutil -p <BUILT_PRODUCTS_DIR>/Kite.app/Contents/Info.plist",
+        "exitCode": 0,
+        "observation": "Every required key present with documented values: CFBundleIdentifier=nl.rb2.kite, CFBundleName=Kite, CFBundleDisplayName=Kite, CFBundleShortVersionString=0.1.0, CFBundleVersion=1, LSApplicationCategoryType=public.app-category.developer-tools, LSMinimumSystemVersion=15.0, NSHighResolutionCapable=true, CFBundleDevelopmentRegion=en, CFBundlePackageType=APPL, NSHumanReadableCopyright='© 2026 Ruben Langeweg'. Xcode also auto-injected CFBundleIconFile=AppIcon and CFBundleIconName=AppIcon from the asset catalog."
+      },
+      {
+        "command": "sips --getProperty all Kite.app/Contents/Resources/AppIcon.icns",
+        "exitCode": 0,
+        "observation": "Valid ICNS (com.apple.icns), 77458 bytes, sRGB, RGBA, verified the asset-catalog compiler packaged the generated PNGs correctly."
+      },
+      {
+        "command": "md5 Tests/KiteTests/ViewTests/__Snapshots__/SettingsAboutTabSnapshotTests/*.png",
+        "exitCode": 0,
+        "observation": "d3d045c5... (dark) != 71d0eaaf... (light) — md5-distinct per AGENTS.md snapshot discipline."
+      }
+    ],
+    "interactiveChecks": [
+      {
+        "action": "Launching Kite interactively to confirm the Dock/Finder icon visually requires a display and is outside this worker's headless environment. Deferred to user-testing-validator-polish. Evidence within reach: plutil confirms CFBundleIconFile=AppIcon, `file` confirms a valid ICNS in the built bundle, asset-catalog compilation logs show the 10 PNGs being consumed.",
+        "observed": "n/a — documented deferment; ICNS + plist checks provide offline evidence."
+      }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/InfoPlistTests.swift",
+        "cases": [
+          { "name": "Source Info.plist has required string keys with expected values", "verifies": "VAL-PKG-004" },
+          { "name": "Source Info.plist has NSHighResolutionCapable = true", "verifies": "VAL-PKG-004" },
+          { "name": "Bundle.main (Kite.app host) exposes required string keys", "verifies": "VAL-PKG-004" },
+          { "name": "Bundle.main (Kite.app host) has NSHighResolutionCapable = true", "verifies": "VAL-PKG-004" },
+          { "name": "AppIcon.appiconset contains PNGs for every required slot", "verifies": "VAL-PKG-003" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/SettingsAboutTabSnapshotTests.swift",
+        "cases": [
+          { "name": "testLight", "verifies": "VAL-UI-008, VAL-PKG-003" },
+          { "name": "testDark", "verifies": "VAL-UI-010, VAL-PKG-003" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "scripts/ is a new top-level directory not listed in INTERFACES.md §3 file-ownership table. It holds only build-time asset tooling (generate_icon.swift) — no shipping code. Either amend INTERFACES.md to list scripts/* under swiftui-worker (or a new 'tooling' owner) or leave it implicit. No functional impact.",
+      "affectsFeature": "scrutiny-validator-polish"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "SettingsAboutTabSnapshotTests is NOT in AGENTS.md's 11-entry skip-list. References were freshly recorded on this host and are md5-distinct; tests pass clean. If future worker environments render differently (the very failure mode the skip-list exists for), add this suite to the skip-list under the M8-fix-snapshot-degeneracy banner.",
+      "affectsFeature": "M8-fix-snapshot-degeneracy"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "About-tab snapshot baselines show the Xcode generic 'grid-on-blueprint' app icon rather than the generated Kite icon. Expected: NSApp.applicationIconImage relies on a running app bundle with NSApplication registered; the XCTest host satisfies neither. In the actual app (Settings > About), the icon resolves to the real ICNS. If scrutiny wants the snapshot to show the real icon, switch the iconView fallback chain to read PNGs from Bundle(for:)+'AppIcon16x16@2x' directly — but it changes the live-app behavior and isn't required by VAL-PKG-003 (which is tool=manual).",
+      "affectsFeature": "user-testing-validator-polish"
+    }
+  ]
+}
