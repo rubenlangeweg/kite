@@ -26,6 +26,32 @@ The `Kite.xcodeproj` bundle is generated from `project.yml` — do not edit it b
 hand. Any build-setting change goes through `project.yml` followed by
 `xcodegen generate`.
 
+## Install (Release build)
+
+Build a signed-to-run-locally Release bundle:
+
+```
+scripts/build_release.sh
+```
+
+Drag `build/Build/Products/Release/Kite.app` into `/Applications`. The
+first launch from Finder triggers macOS's "unsigned app from an
+unidentified developer" dialog; right-click → Open → Open anyway.
+Subsequent launches don't prompt.
+
+To install on a different Mac, re-run `scripts/build_release.sh` on that
+machine — the ad-hoc signature is machine-local.
+
+Sanity-check the built bundle against the cancellation invariant:
+
+```
+scripts/smoke_launch.sh
+```
+
+It launches Kite, quits it, and verifies no leaked `git` subprocesses.
+
+No DMG, no notarization in v1.
+
 ## Command-line build & test
 
 `xcode-select` on this machine may point at the Command Line Tools rather than
