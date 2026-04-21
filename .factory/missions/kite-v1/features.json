@@ -584,9 +584,10 @@
         "VAL-DIFF-006",
         "VAL-GRAPH-009"
       ],
-      "status": "completed-code-only",
-      "testDebt": ["CommitDiffModelTests", "CommitDiffSnapshotTests", "CommitDiffUITests", "handoff-JSON"],
-      "note": "worker rate-limited mid-task; orchestrator landed wiring fix; tests must be added in M7-fix-commit-diff-tests next session"
+      "status": "completed",
+      "commit": "23014eb",
+      "fixCommit": "5a1000a",
+      "note": "landed in 3 commits: 23014eb (code from rate-limited worker) + d31bc41 (orchestrator wiring + commit-diff nonisolated fix) + 5a1000a (M7-fix-commit-diff-tests closing the test debt)"
     },
     {
       "id": "M8-commands-and-menu",
