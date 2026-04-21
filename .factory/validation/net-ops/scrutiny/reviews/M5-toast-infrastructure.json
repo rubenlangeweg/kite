@@ -1,0 +1,49 @@
+{
+  "milestoneId": "M5-net-ops",
+  "featureId": "M5-toast-infrastructure",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Toast + Progress surfaces introduced cleanly as @Observable @MainActor singletons injected via @Environment on both WindowGroup and Settings scenes. ToastCenter uses the SettingsRootsTab monotonic-tick precedent for race-free auto-dismiss (autoDismissTicks[id]==mine check in the deferred Task). Success cap of 3 evicts oldest success without touching errors. ToastHostView overlays bottom-aligned with VStack + bottom-edge transition; row implements stateful outer + presentational inner correctly. ToolbarProgressIndicator collapses to zero-width Color.clear when idle so toolbar layout doesn't shuffle. 7 ViewModel tests + 4 snapshot tests (all md5-distinct) + 3 progress-widget snapshots. Good foundation for M5-fetch / M5-pull-push / M5-auto-fetch to build on — reuse is proven by all three following features consuming toasts / progress without further API changes.",
+    "issues": [
+      {
+        "file": "Sources/ViewModels/ToastCenter.swift",
+        "line": 108,
+        "severity": "non-blocking",
+        "description": "Newest-first insertion (insert at index 0) combined with ToastHostView's top-to-bottom VStack + bottom-align produces the 'newest at bottom' UX described in the doc-comment. The ordering is correct but non-obvious — a reader has to trace the overlay alignment to understand why array index 0 ends up visually on top. Worth a short comment on ToastHostView's VStack explaining the coupling."
+      },
+      {
+        "file": "Sources/Views/Toasts/ToastHostView.swift",
+        "line": 24,
+        "severity": "non-blocking",
+        "description": "Accessibility identifier embeds the toast UUID: 'Toast.success.<uuid>'. XCUITest predicates can match on prefix via BEGINSWITH but there's no machine-readable message attribute — UI tests that want to assert on toast copy have to rely on .label (which concatenates VStack children). Consider exposing an explicit .accessibilityValue(toast.message) so XCUITest BEGINSWITH + match-on-value is cheap."
+      },
+      {
+        "file": "Sources/ViewModels/ProgressCenter.swift",
+        "line": 28,
+        "severity": "non-blocking",
+        "description": "ToolbarProgressIndicator renders only `progress.active.first`. When two ops run concurrently (rare — focus.queue serialises per repo, but cross-repo is possible if M5 auto-fetch and a user-triggered fetch on another focus ever coexist in this window) the second op's progress is invisible. Current milestone doesn't expose cross-repo concurrency so this is latent; worth a doc note on ProgressCenter about the 'first item wins' rendering contract."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "observable injection pattern",
+      "observation": "@State networkOps + @State autoFetchController follow the established 'init-in-KiteApp.init, inject via .environment on both scenes' idiom. Settings scene mirrors WindowGroup's environment stack, so the Settings > General toggle reads from the same PersistenceStore as the WindowGroup's RootView.",
+      "evidence": "Sources/App/KiteApp.swift:36-71"
+    },
+    {
+      "area": "monotonic-tick reuse",
+      "observation": "ToastCenter.scheduleAutoDismiss adopts the SettingsRootsTab.showInlineError pattern verbatim. AGENTS.md Established patterns §4 documents the precedent — it's now used in two places.",
+      "evidence": "Sources/ViewModels/ToastCenter.swift:132-146"
+    },
+    {
+      "area": "snapshot md5 discipline",
+      "observation": "7 new snapshots (ToastRow × 4, ToolbarProgressIndicator × 3) all byte-distinct per M5-toast-infrastructure handoff verification. No regression of M2 degenerate snapshots — RepoSidebar/SettingsRootsTab remain skip-listed, unchanged.",
+      "evidence": "handoff M5-toast-infrastructure.json verification step 'find ... md5 -r' unique count 7/7"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-UI-004", "VAL-UI-005", "VAL-UI-006", "VAL-UI-010"],
+    "unverified": []
+  }
+}

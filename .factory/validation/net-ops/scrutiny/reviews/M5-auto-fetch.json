@@ -1,0 +1,55 @@
+{
+  "milestoneId": "M5-net-ops",
+  "featureId": "M5-auto-fetch",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "AutoFetchController @Observable @MainActor cleanly implements sleep-first-fetch-second semantics. retarget(to:) cancels any prior task before spawning a new one, early-returns for nil focus or toggle-off, and the loop re-checks both the toggle and currentFocusID on every tick so an off-flip or focus-swap during the sleep window silently skips the fetch rather than firing on stale state. stop() is idempotent (nil-safe cancel + clear currentFocusID). intervalSeconds is @ObservationIgnored and var so tests override with 1s without triggering view redraws. RootView wires: .task(id: repoStore.focus?.repo.id) → retarget, .onChange(of: autoFetchEnabled) → retarget, .onDisappear → stop. 6 ViewModel tests using real bare-upstream fixtures (1s interval) indirectly observe 'did a fetch fire?' via `git rev-parse origin/main` — elegant test pattern that avoids test-only instrumentation in production code. VAL-NET-007 strict (non-focused repos never fetched) is proven by the cancelsOnFocusChange test which pushes upstream commits to focus A, swaps to focus B before the first tick, waits past the interval, and asserts A's origin/main has NOT moved.",
+    "issues": [
+      {
+        "file": "Sources/ViewModels/AutoFetchController.swift",
+        "line": 80,
+        "severity": "non-blocking",
+        "description": "Captured `focus` is strong-held across the Task closure for the lifetime of the timer. RepoFocus is class-backed so this is a retain cycle as long as the Task runs; cancel on retarget + stop handle teardown correctly today. But a RepoFocus whose timer retargets to nil (focus cleared) relies on the cancel + task=nil to release — verify this is invariant. The guard at line 97 (focus.repo.id == currentFocusID) stops the loop on stale focus but doesn't nil the captured `focus` — the closure still holds it until the containing Task completes. Non-blocking; documenting here so M6 doesn't copy the pattern with a longer-lived focus."
+      },
+      {
+        "file": "Sources/ViewModels/AutoFetchController.swift",
+        "line": 83,
+        "severity": "non-blocking",
+        "description": "Task.sleep on `interval * 1_000_000_000` as UInt64 — at default 300s × 1e9 = 3e11, comfortably under UInt64.max. But a test setting intervalSeconds = UInt64.max would overflow the multiplication silently. Practically impossible today; consider clamping intervalSeconds to a sane upper bound in the setter if intervalSeconds ever becomes user-configurable."
+      },
+      {
+        "file": "Sources/Views/RootView.swift",
+        "line": 70,
+        "severity": "non-blocking",
+        "description": ".onDisappear calls autoFetch.stop(). For a multi-window setup (⌘N — VAL-UI-009), closing the second window will stop() the shared singleton controller, disabling auto-fetch for the remaining window. Not in M5 scope but worth flagging: the controller is singleton at the app level (one per KiteApp), so per-window lifecycle is tricky. M8's multi-window story will need to either make AutoFetchController per-window or scope stop() to a reference-count."
+      },
+      {
+        "file": "Sources/ViewModels/AutoFetchController.swift",
+        "line": 98,
+        "severity": "non-blocking",
+        "description": "`_ = await ops.fetch(on: focus)` ignores the Bool result. Fine for auto-fetch UX (the toast surface already reports outcome) but means a stream of auth failures produces a stream of sticky red toasts on every interval until the user fixes auth or toggles off. Consider a 'suppress further auto-fetch errors after 3 consecutive failures' policy. Not in M5 scope; note for M8 polish."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "timer lifecycle discipline",
+      "observation": "Sleep-first-fetch-second is the correct UX — selecting a repo doesn't trigger a barrage. Re-reading autoFetchEnabled on each tick (not just at retarget) means the toggle propagates without requiring the user to change focus. currentFocusID guard closes the 'retarget mid-sleep' race.",
+      "evidence": "Sources/ViewModels/AutoFetchController.swift:82-98"
+    },
+    {
+      "area": "observer count still at 3",
+      "observation": "M5-auto-fetch introduces NO new per-focus observer. AutoFetchController piggybacks on the existing RepoStore.focus via .task(id:) — no .onChange(of: focus.lastChangeAt) added. AGENTS.md consolidation guidance stands; M7 will be the critical one.",
+      "evidence": "Sources/Views/RootView.swift:59-71"
+    },
+    {
+      "area": "test pattern — indirect observation",
+      "observation": "AutoFetchControllerTests observe 'did a fetch fire?' via `git rev-parse origin/main` on the tracker fixture rather than instrumenting NetworkOps for test-only counters. This keeps production code clean and proves end-to-end timer → NetworkOps → Git.stream → fetch → origin ref advancement.",
+      "evidence": "Tests/KiteTests/ViewModelTests/AutoFetchControllerTests.swift:64-67 + 114-145"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-NET-006", "VAL-NET-007"],
+    "unverified": []
+  }
+}

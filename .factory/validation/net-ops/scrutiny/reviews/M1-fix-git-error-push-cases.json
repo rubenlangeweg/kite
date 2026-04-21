@@ -1,0 +1,38 @@
+{
+  "milestoneId": "M5-net-ops",
+  "featureId": "M1-fix-git-error-push-cases",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Prerequisite fix for M5-pull-push: adds GitError.remoteRejected, .hookRejected, .protectedBranch with detail extractors (hookDeclinedReason, protectedBranchDetail, remoteRejectedReason) and places the specific push-rejection patterns BEFORE the generic nonFastForward check so a server-side 'denying non-fast-forward' classifies as .remoteRejected rather than an incorrect local-side hint. ErrorClassifier now has three dedicated extractors that pull an actionable detail line from multi-line stderr (the 'Changes must be made through a pull request.' GH006 follow-up, or the tail of 'hook declined: <reason>'). Parameterised fixture suite + detail-extraction tests + 2 explicit precedence assertions. Clean, well-justified ordering.",
+    "issues": [
+      {
+        "file": "Sources/Git/ErrorClassifier.swift",
+        "line": 29,
+        "severity": "non-blocking",
+        "description": "Auth-pattern ordering still mis-classifies a MISSING-REMOTE-DIR fetch as .auth because 'could not read from remote repository' fires before the .notAGitRepository check at line 91. M5-fetch's discoveredIssue flags this: NetworkOpsFetchTests.fetchReportsErrorOnMissingRemote produces an 'Authentication failed' toast for a deleted bare. The fix is a two-line re-order — move the 'does not appear to be a git repository' check ABOVE the auth block. Deferred; not introduced by this feature (pattern predates it) and user-facing impact is mild (toast still shows full stderr via click-to-expand). Queue as M8 polish."
+      },
+      {
+        "file": "Sources/Git/ErrorClassifier.swift",
+        "line": 92,
+        "severity": "non-blocking",
+        "description": "'not a git repository' case-insensitive match catches both the remote and local variants (e.g. a 'fatal: not a git repository' thrown by a local git invocation with a wrong cwd). Harmless today but worth a comment noting this is intentional; future readers may try to narrow it to the remote-side variant. One-line doc comment suffices."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "error taxonomy",
+      "observation": "GitError now carries 3 push-rejection cases (remoteRejected / hookRejected / protectedBranch) with per-case LocalizedError strings tuned for toast rendering. Downstream NetworkOps.pushErrorMessage consumes them via a switch/default pattern — consistent.",
+      "evidence": "Sources/Git/GitError.swift:40-45 + Sources/ViewModels/NetworkOps.swift:296-314"
+    },
+    {
+      "area": "pattern ordering discipline",
+      "observation": "Classifier now has explicit comments documenting the 'specific before generic' rule (ErrorClassifier.swift:38-42, 59-60). Subsequent workers touching ErrorClassifier will see the discipline.",
+      "evidence": "Sources/Git/ErrorClassifier.swift:38-66"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-PARSE-007"],
+    "unverified": []
+  }
+}

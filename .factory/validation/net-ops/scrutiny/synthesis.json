@@ -1,0 +1,211 @@
+{
+  "milestone": "net-ops",
+  "round": 1,
+  "status": "pass-with-non-blocking-issues",
+  "validatorsRun": {
+    "xcodegen": {
+      "exitCode": 0,
+      "observation": "xcodegen generate regenerated the project cleanly (Kite.xcodeproj rewritten, no diffs vs. M5-auto-fetch handoff)."
+    },
+    "build": {
+      "exitCode": 0,
+      "observation": "xcodebuild -scheme Kite -configuration Debug build: ** BUILD SUCCEEDED ** with no new warnings."
+    },
+    "test": {
+      "exitCode": 0,
+      "observation": "xcodebuild test -only-testing:KiteTests with skip list: 201 tests in 30 suites passed after 97.1s. Includes M5's additions over the M4 baseline of 164: +7 ToastCenter + 6 ProgressCenter (M5-toast-infrastructure) + 4 ToastRow snapshot + 3 ToolbarProgressIndicator snapshot + 4 NetworkOpsFetch + 6 NetworkOpsPullPush + 3 SecurityInvariants (grep) + 6 AutoFetchController = 39 new KiteTests. KiteUITests NOT run (TCC blocker, per AGENTS.md §Dev build loop)."
+    },
+    "swiftformat": {
+      "exitCode": 0,
+      "observation": "swiftformat Sources Tests --lint: 0/118 files require formatting."
+    },
+    "swiftlint": {
+      "exitCode": 0,
+      "observation": "swiftlint --strict: 0 violations, 0 serious in 118 files."
+    },
+    "securityGrep": {
+      "exitCode": 0,
+      "observation": "grep -rn '--force\\|reset --hard\\|git clean\\|push -f\\|--force-with-lease' Sources/: no matches. VAL-SEC-001/002/003 manually re-verified."
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 0,
+    "passedWithNonBlocking": 5,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "M1-fix-git-error-push-cases",
+      "file": "Sources/Git/ErrorClassifier.swift",
+      "line": 29,
+      "description": "Missing-remote-directory fetch classifies as .auth rather than .notAGitRepository because 'could not read from remote repository' fires at line 31 before the 'not a git repository' check at line 91. Flagged by M5-fetch's handoff; pre-existing pattern ordering issue, not introduced by this milestone. Fix is a two-line re-order. Queue as M8 polish."
+    },
+    {
+      "featureId": "M5-toast-infrastructure",
+      "file": "Sources/Views/Toasts/ToastHostView.swift",
+      "line": 24,
+      "description": "Toast accessibility identifier includes UUID but no .accessibilityValue for the message body. XCUITest predicates have to rely on VStack label concatenation. Consider .accessibilityValue(toast.message) for cheaper predicate match."
+    },
+    {
+      "featureId": "M5-toast-infrastructure",
+      "file": "Sources/ViewModels/ProgressCenter.swift",
+      "line": 28,
+      "description": "ToolbarProgressIndicator renders only active.first. Cross-repo concurrent progress (auto-fetch repo A while user triggers fetch on repo B in the same window) is impossible today (single focus) but document the 'first wins' contract on ProgressCenter for future multi-focus support."
+    },
+    {
+      "featureId": "M5-fetch",
+      "file": "Sources/ViewModels/NetworkOps.swift",
+      "line": 221,
+      "description": "Explicit await MainActor.run inside the @Sendable focus.queue.run closure because NetworkOps.fetch's body runs in a detached Task context under the queue. Correct but non-obvious; one-line comment would save a future reader a scratched-head."
+    },
+    {
+      "featureId": "M5-fetch",
+      "file": "Sources/ViewModels/NetworkOps.swift",
+      "line": 226,
+      "description": "GitError.processFailed is thrown with a stderr payload that the catch block never consumes (the StderrAccumulator is re-read instead). Either drop stderr from the throw or document the authoritative source is the accumulator."
+    },
+    {
+      "featureId": "M5-pull-push",
+      "file": "Tests/KiteTests/SecurityInvariantsTests.swift",
+      "line": 48,
+      "description": "Grep invariants cover --force / reset --hard / git clean. Missing: short-form 'push -f', '\"-f\"' standalone arg, '\"-D\"' force-delete branch. Cheap to add; strengthens the invariant against the short-form attack surface."
+    },
+    {
+      "featureId": "M5-pull-push",
+      "file": "Sources/ViewModels/NetworkOps.swift",
+      "line": 140,
+      "description": "push(...) hardcodes remote='origin' in the .needsUpstream outcome. Fork workflows with distinct upstream/fork remotes will show the wrong remote in UpstreamSetSheet. Out-of-scope polish for M8."
+    },
+    {
+      "featureId": "M5-pull-push",
+      "file": "Sources/ViewModels/NetworkOps.swift",
+      "line": 319,
+      "description": "SwiftFormat's redundantSendable rule strips `: Sendable` from PushOutcome. Auto-synthesis still applies so Sendable conformance is fine, but the spec's literal signature drifted. Either disable redundantSendable for enum decls or update the spec."
+    },
+    {
+      "featureId": "M5-auto-fetch",
+      "file": "Sources/ViewModels/AutoFetchController.swift",
+      "line": 80,
+      "description": "The Task closure strong-captures `focus` for the timer's lifetime. Retain cycle is managed by retarget's cancel + task=nil + stop(); the pattern works but the captured-until-Task-completes detail deserves a one-line comment so M6 doesn't copy with a longer-lived focus."
+    },
+    {
+      "featureId": "M5-auto-fetch",
+      "file": "Sources/ViewModels/AutoFetchController.swift",
+      "line": 98,
+      "description": "auto-fetch ignores the Bool result. Repeated auth failures on the auto-fetch timer will produce a sticky red toast every interval until the user toggles off. Consider a 'suppress after N consecutive failures' policy in M8 polish."
+    },
+    {
+      "featureId": "M5-auto-fetch",
+      "file": "Sources/Views/RootView.swift",
+      "line": 70,
+      "description": "AutoFetchController is a single app-level singleton but its .onDisappear wiring is per-window. Closing a second window (⌘N — VAL-UI-009) stops auto-fetch for the remaining window. Latent M8 multi-window scope issue."
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "file": "INTERFACES.md",
+      "change": "§4 Shared state rules → Per-focus observer fan-out: update the counter. M5 did NOT add a 4th observer — fetch/pull/push and auto-fetch both leverage the existing FSEvents-driven lastChangeAt observers (branch list + status header + graph, still 3). The consolidation pressure is entirely owned by M7 (diff pane). Add: 'M5 landed without adding observers; M7 is the one that pushes us to 5. The RepoDetailModel refactor MUST ship before M7-commit-diff lands.' Also consider a note that the M5 pattern (FSEvents-driven refresh via existing observers rather than callback threading) is the preferred solution and M6 branch-ops should follow the same pattern — `git switch` writes to HEAD, FSEvents tick, existing observers reload.",
+      "rationale": "M5 demonstrated that not every write op needs a callback-driven reload; leveraging the existing FSEvents observers is cheaper and less error-prone. Codify the pattern before M6."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Under Known gotchas → Git CLI, append: '10. M5 NetworkOps pattern. The `runStreaming(on:args:progressLabel:)` shared helper in NetworkOps is the template for any future network-facing op (pull-rebase in a hypothetical M9, etc.): begin progress → focus.queue.run wraps the whole stream → ProgressParser feeds MainActor ProgressCenter updates → StderrAccumulator actor collects stderr → classify via ErrorClassifier → structured StreamOutcome (.success / .cancelled / .failed). DO NOT copy-paste a network op body; extend `runStreaming` or add a sibling helper.' Also: 'StderrAccumulator actor is the canonical pattern when a `@Sendable` closure needs mutable collection state across awaits.'",
+      "rationale": "M5-pull-push already factored this; codify so M6+ don't regress by copy-pasting."
+    },
+    {
+      "file": "skills/swiftui-worker/SKILL.md",
+      "change": "Add a section on TOAST + PROGRESS injection idioms: 'Any @Observable service that needs injection on both WindowGroup and Settings scenes must be wired to BOTH. KiteApp.swift injects ToastCenter, ProgressCenter, NetworkOps, AutoFetchController twice — once per scene. Forgetting the Settings scene means Settings-triggered ops (if any) get a fresh default-initialized singleton, silently diverging state. Reviewer check: any new environment(X.self) added to WindowGroup must mirror to Settings.'",
+      "rationale": "Three features this milestone extended the scene environment; getting it right once is not the same as the pattern being obvious."
+    },
+    {
+      "file": "skills/git-engine-worker/SKILL.md",
+      "change": "Under ErrorClassifier: 'Pattern ordering is load-bearing. Specific patterns (protectedBranch, hookRejected, remoteRejected, nonFastForward, noUpstream) must precede more generic ones (auth, notAGitRepository). M1-fix-git-error-push-cases documents the discipline. Known follow-up: the auth block at line 29-36 fires BEFORE notAGitRepository at line 91, which mis-classifies a missing-remote-dir fetch as .auth. Queue the re-order as an M8 polish pass — moving the notAGitRepository block above auth.'",
+      "rationale": "Make the known mis-classification an explicit actionable rather than buried in a handoff's discoveredIssues."
+    },
+    {
+      "file": "validation-contract.md",
+      "change": "VAL-SEC-001 evidence currently reads: `shell` — `! grep -r 'force' kite/Sources | grep -v comment`. Update to reference SecurityInvariantsTests.swift — the runtime grep-based test is the actual proof surface and it's compile-time guaranteed to run on every CI invocation. Same for VAL-SEC-002, VAL-SEC-003. Keeps the contract aligned with what actually enforces it.",
+      "rationale": "Doc-alignment. The contract still points at a manual grep; SecurityInvariantsTests is now the authoritative enforcement."
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilledThisMilestone": [
+      "VAL-NET-001",
+      "VAL-NET-002",
+      "VAL-NET-003",
+      "VAL-NET-004",
+      "VAL-NET-005",
+      "VAL-NET-006",
+      "VAL-NET-007",
+      "VAL-NET-009",
+      "VAL-NET-011",
+      "VAL-BRANCH-006",
+      "VAL-UI-004",
+      "VAL-UI-005",
+      "VAL-UI-006",
+      "VAL-UI-010",
+      "VAL-SEC-001",
+      "VAL-SEC-002",
+      "VAL-SEC-003",
+      "VAL-PARSE-007"
+    ],
+    "anyOrphansOrFailures": [
+      {
+        "assertion": "VAL-NET-008",
+        "status": "architecturally-enforced",
+        "note": "GIT_TERMINAL_PROMPT=0 is set in Git.run / Git.stream env (verified in foundation scrutiny + still in place). No M5 test exercises a prompt-requiring remote to prove <10s timeout, but the env var prevents the prompt entirely. Covered by user-testing-validator-net-ops manual walkthrough."
+      },
+      {
+        "assertion": "VAL-NET-010",
+        "status": "deferred",
+        "note": "Window-close cancellation via Process.terminate. Authored XCUITest would close the window mid-fetch; relies on TCC-unblocked host. Defer to user-testing-validator-net-ops."
+      },
+      {
+        "assertion": "VAL-NET-009",
+        "status": "partial",
+        "note": "fetchSerializesInQueue test runs two fetches concurrently and asserts both succeed + 2 success toasts + progress drains. Indirect proof of serialization via ordering of end() calls; no explicit assertion that the second op waited for the first. Could be strengthened with a completion-order test (e.g. tag each op, verify first-started-first-finished)."
+      }
+    ]
+  },
+  "carryOverObservations": [
+    {
+      "area": "graph milestone carry-overs",
+      "status": "partially-mitigated",
+      "note": "M1-fix-git-run-drain (Git.run pipe-buffer concurrency fix) still deferred — M5 consistently used Git.stream for network ops so no new large-output Git.run callers this milestone. Pressure remains on M7-commit-diff. RepoDetailModel consolidation unchanged — M5 did not regress (still 3 observers). GraphModel transient error wipes rows=[] — unchanged, M5 NetworkOps does not wipe state on error."
+    },
+    {
+      "area": "repo-list / foundation carry-overs",
+      "status": "unchanged",
+      "note": "SettingsRootsTab + RepoSidebar degenerate snapshots remain skip-listed. GitQueue @unchecked Sendable CompletionGate still lacks a one-sentence justification doc-comment. PersistenceStore silent swallows unchanged. These are all pre-M5."
+    },
+    {
+      "area": "ownership crossover",
+      "status": "unchanged",
+      "note": "M5 did not introduce new crossovers. NetworkOps lives under Sources/ViewModels (swiftui-worker territory) and touches Git via public Git.stream API — no git-engine-worker files modified."
+    },
+    {
+      "area": "new concerns introduced this milestone",
+      "status": "non-blocking",
+      "note": "(1) Auth / notAGitRepository ordering still mis-classifies missing-remote-dir as .auth — M5-fetch's discoveredIssue, not introduced here but newly surfaced in production. (2) AutoFetchController singleton vs. multi-window scope tension (M8 problem). (3) SwiftFormat redundantSendable ate PushOutcome's explicit Sendable (cosmetic). (4) Toast accessibility identifier missing value-attribute for message body."
+    }
+  ],
+  "deferredUserTestingFollowUps": [
+    "Run Tests/KiteUITests/FetchUITests.swift (2 cases), PullPushUITests.swift (4 cases), ToastsUITests.swift (2 cases), AutoFetchUITests.swift (2 cases — XCTSkipIf'd pending interval-override) on a TCC-unblocked host.",
+    "VAL-NET-008: verify a push to an HTTPS remote requiring password input fails within ~10s (GIT_TERMINAL_PROMPT=0 behaviour). Requires a network-configured fixture.",
+    "VAL-NET-010: manually close the main window mid-fetch; verify `pgrep -P <kite-pid>` shows no leftover /usr/bin/git child process after the window's .onDisappear fires.",
+    "VAL-REPO-010 / VAL-BRANCH-006 end-to-end: fetch a repo with incoming commits; confirm branch list ahead/behind counts + graph update within 2s of the FSEvents tick — both are architecturally covered but not exercised by any automated test in this milestone."
+  ],
+  "pretraversalM6Guidance": {
+    "blocksM6": false,
+    "requiredBeforeM6": [],
+    "strongRecommendBeforeM7": [
+      "M1-fix-git-run-drain (Git.run pipe-buffer concurrent drain) — M7 diff pane will exceed 64KB consistently. This was flagged before M4 and is now the single sharpest pre-M7 blocker.",
+      "RepoDetailModel consolidation per INTERFACES.md §4 — still at 3 observers today; M7 adds 2 more (uncommitted diff + commit diff) pushing to 5. Every extra day compounds the refactor cost.",
+      "ErrorClassifier pattern re-order — move notAGitRepository above auth so missing-remote-dir classifies correctly."
+    ]
+  },
+  "previousRound": null
+}

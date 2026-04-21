@@ -1,0 +1,56 @@
+{
+  "milestoneId": "M5-net-ops",
+  "featureId": "M5-fetch",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "NetworkOps.fetch wires `git fetch --all --prune --progress` through Git.stream inside focus.queue.run. Progress stderr flows through ProgressParser → ProgressCenter; success emits a green toast, failure classifies via ErrorClassifier and surfaces a red sticky toast with captured stderr detail. CancellationError silently ends progress without a toast — correct UX for focus-swap / window-close. StderrAccumulator actor is the right choice for a @Sendable closure needing mutable collection state. FetchToolbarButton is a thin wrapper with local `isRunning` guard and an accessibility identifier. Branch-list/status-header refresh after fetch is correctly FSEvents-driven (git writes to .git/FETCH_HEAD → existing .onChange(of: focus.lastChangeAt) observers reload) — avoids adding a fourth observer. 4 ViewModel tests using real bare-upstream fixtures (fetchReportsSuccess, fetchReportsErrorOnMissingRemote, fetchDrivesProgress, fetchSerializesInQueue) all green. Command exactness verified: args exactly ['fetch', '--all', '--prune', '--progress'].",
+    "issues": [
+      {
+        "file": "Sources/ViewModels/NetworkOps.swift",
+        "line": 221,
+        "severity": "non-blocking",
+        "description": "Inside the @Sendable Git.stream loop, `await MainActor.run { self.progress.update(...) }` hops back to MainActor for each progress update. NetworkOps is itself @MainActor, so the hop is only because focus.queue.run runs its body in a detached Task. Correct, but worth a one-line comment explaining why the explicit MainActor.run is needed — future readers will wonder why a @MainActor type needs to re-hop."
+      },
+      {
+        "file": "Sources/ViewModels/NetworkOps.swift",
+        "line": 226,
+        "severity": "non-blocking",
+        "description": "Git.stream's .completed event carries the exit code and we throw GitError.processFailed on non-zero. The thrown error's `.stderr` payload duplicates the accumulator's content — the catch block at line 240 re-reads the accumulator (correct) and the throw's stderr field is never read. Consider dropping stderr from the throw (pass empty string or 0-code sentinel) to avoid the implication that the throw's payload is authoritative. Non-blocking."
+      },
+      {
+        "file": "Sources/ViewModels/NetworkOps.swift",
+        "line": 263,
+        "severity": "non-blocking",
+        "description": "classify(error:stderr:) prefers the ErrorClassifier output over the already-typed GitError.processFailed thrown above. This is the right default (classified typed errors have better errorDescription) but means the original exit code is discarded. If a future caller wants to branch on exit code vs stderr for some edge case, the info is gone. Current callers don't need it; document the intent in a one-liner."
+      },
+      {
+        "file": "Sources/ViewModels/NetworkOps.swift",
+        "line": 220,
+        "severity": "non-blocking",
+        "description": "ProgressParser.consume(line + '\\n') re-adds a newline stripped by Git.stream. If Git.stream ever changes to pass '\\n'-terminated lines, this will double-newline and the parser's '\\r'-split logic would need to handle that. The coupling is implicit. A brief comment at the call site locking in the contract ('ProgressParser wants newline-terminated feed; Git.stream emits bare lines') prevents future breakage."
+      },
+      {
+        "file": "Tests/KiteTests/ViewModelTests/NetworkOpsFetchTests.swift",
+        "line": 162,
+        "severity": "non-blocking",
+        "description": "fetchDrivesProgress only asserts progress.active.isEmpty at the end. The inline comment acknowledges the race — we can't reliably sample mid-fetch without instrumenting. A fully-deterministic alternative is to inject a progress sink that records append/remove events (Observable → observation proxy) or expand ProgressCenter to expose a monotonic event count. Defer; current test is adequate."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "queue boundary discipline",
+      "observation": "focus.queue.run wraps the entire stream lifetime, not just the launch — matches INTERFACES.md guidance and GraphModel.performReload precedent. A user-triggered fetch + auto-fetch tick + a future pull/push all serialise correctly via CompletionGate chain.",
+      "evidence": "Sources/ViewModels/NetworkOps.swift:211-232"
+    },
+    {
+      "area": "observer count unchanged",
+      "observation": "M5-fetch does NOT add a 4th per-focus observer. The FSEvents-driven refresh (branch list + status header reloads after fetch writes to .git/) leverages the existing 3 observers (branch/status/graph). Good discipline — AGENTS.md pre-M7 consolidation guidance stands.",
+      "evidence": "handoff M5-fetch.json whatWasImplemented: 'Branch-list/status-header refresh after fetch is FSEvents-driven (VAL-BRANCH-006)'"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-NET-001", "VAL-NET-005", "VAL-NET-011", "VAL-BRANCH-006"],
+    "unverified": []
+  }
+}

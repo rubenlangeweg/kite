@@ -1,0 +1,55 @@
+{
+  "milestoneId": "M5-net-ops",
+  "featureId": "M5-pull-push",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Pull + Push + push-with-upstream correctly factor through a shared runStreaming(on:args:progressLabel:) helper — no copy-paste of the begin-progress/stream/parser/accumulate/classify flow across the three ops. Commands are exactly: pull ['pull', '--ff-only', '--progress'] (no --rebase), push ['push', '--progress'] (no --force, no --force-with-lease), push --set-upstream ['push', '--set-upstream', remote, branch, '--progress']. PushOutcome enum cleanly separates .success / .needsUpstream / .failed; .noUpstream is routed to the sheet (no toast) so the UX is never a red banner immediately followed by a sheet prompt. UpstreamSetSheet blocks until the user explicitly chooses Cancel or Confirm — never auto-confirms. SecurityInvariantsTests grep-prove no --force / reset --hard / git clean tokens in Sources/ at test-run time — VAL-SEC-001/2/3 now compile-time-proven for every future feature. Current grep catches: --force (substring also catches --force-with-lease, --force-if-includes), 'reset --hard' literal + '\"--hard\"' argument, 'git clean' literal. 6 ViewModel tests using real bare-origin fixtures including a dedicated 'pushDoesNotForce' regression test that pushes on a diverged state and asserts the bare remote's head stays put — load-bearing runtime proof that no --force slipped in.",
+    "issues": [
+      {
+        "file": "Tests/KiteTests/SecurityInvariantsTests.swift",
+        "line": 48,
+        "severity": "non-blocking",
+        "description": "Grep invariants catch '--force', 'reset --hard', '\"--hard\"', 'git clean'. They do NOT catch the short-form 'push -f' nor the 'rebase --force' / 'clean -f' variants. Not a blocker (no shipping code touches these), but a completeness pass would add checks for '\" -f \"' (as a standalone arg) and '\"-D\"' (force-delete branch). Queue as an M8 polish addition — cheap to write, strengthens the invariant."
+      },
+      {
+        "file": "Sources/ViewModels/NetworkOps.swift",
+        "line": 140,
+        "severity": "non-blocking",
+        "description": "push(...) hardcodes the remote to 'origin' in the .needsUpstream outcome. For repos with a non-origin primary remote (common in fork workflows: remotes=upstream+fork, default-push=fork), the sheet will suggest the wrong remote. An out-of-scope follow-up: read `git config push.default` + `git config branch.<name>.pushRemote` and fall back to origin only if those are unset. Not in M5 scope; note for M8 polish or a dedicated remote-management feature."
+      },
+      {
+        "file": "Sources/Views/Toolbar/PushToolbarButton.swift",
+        "line": 72,
+        "severity": "non-blocking",
+        "description": "readCurrentBranch uses Git.run (not Git.stream) for `git symbolic-ref --short HEAD`. Output is small (one line), so no pipe-buffer risk. But this bypasses focus.queue, so if the user mashes Push while a fetch is streaming, symbolic-ref runs concurrently. Safe (it's a metadata read, no index lock), but worth a one-line note so reviewers of M6 branch-ops don't copy the pattern for a write op."
+      },
+      {
+        "file": "Sources/ViewModels/NetworkOps.swift",
+        "line": 319,
+        "severity": "non-blocking",
+        "description": "PushOutcome declared `: Equatable` only; SwiftFormat's redundantSendable rule stripped the explicit Sendable conformance. Swift auto-synthesises Sendable for enums with Sendable cases so behaviour is fine, but the handoff flagged the divergence from the spec's literal signature. Either disable redundantSendable for enum declarations or accept the synthesized conformance and update the spec. Low-effort fix; cosmetic."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "shared helper pattern",
+      "observation": "runStreaming(on:args:progressLabel:) is the right abstraction — all three ops differ only in arg vector + success-toast message + error-message mapping. M5-fetch's discoveredIssue explicitly requested this factoring; M5-pull-push delivered it cleanly.",
+      "evidence": "Sources/ViewModels/NetworkOps.swift:200-244"
+    },
+    {
+      "area": "sheet lifecycle",
+      "observation": "UpstreamPrompt is Identifiable with a fresh UUID per presentation so .sheet(item:) keys independently per trigger — prevents the 'stuck sheet' SwiftUI footgun where presenting the same Identifiable twice misses the second presentation.",
+      "evidence": "Sources/Views/Toolbar/PushToolbarButton.swift:24-33, 58-66"
+    },
+    {
+      "area": "VAL-SEC runtime proof",
+      "observation": "pushDoesNotForce test provisions a diverged state, calls ops.push, asserts bare remote's refs/heads/main did NOT advance. This is a runtime invariant — any future worker who tried to pass --force would see this test fail, independent of the grep-based SecurityInvariantsTests.",
+      "evidence": "Tests/KiteTests/ViewModelTests/NetworkOpsPullPushTests.swift:289-331"
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": ["VAL-NET-002", "VAL-NET-003", "VAL-NET-004", "VAL-SEC-001", "VAL-SEC-002", "VAL-SEC-003"],
+    "unverified": []
+  }
+}
