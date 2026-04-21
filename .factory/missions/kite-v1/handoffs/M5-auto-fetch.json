@@ -1,0 +1,48 @@
+{
+  "featureId": "M5-auto-fetch",
+  "salientSummary": "Background 5-min auto-fetch on the focused repo via AutoFetchController @Observable timer; retargets on focus change and Settings toggle change; hard-stops on window close; 6 ViewModel tests (bare-upstream fixtures, 1s interval override) + 2 authored XCUITests (skipped pending interval-override launch-arg); 201/201 KiteTests green under the M8 skip list; VAL-NET-006 and VAL-NET-007 fulfilled.",
+  "whatWasImplemented": "Added Sources/ViewModels/AutoFetchController.swift — @Observable @MainActor final class with retarget(to:), stop(), isRunning, and a tunable intervalSeconds (default 300). The timer loop sleeps first then fetches, re-reads persistence.settings.autoFetchEnabled on each tick so a toggle-off during the wait window silently skips the fetch, and guards against stale focus via currentFocusID so a retarget that swaps focus mid-sleep stops rather than fetching on the prior repo. Wired Sources/App/KiteApp.swift to create AutoFetchController(ops:persistence:) after NetworkOps + PersistenceStore and inject via .environment on both WindowGroup and Settings scenes. Extended Sources/Views/RootView.swift with @Environment(RepoStore.self) + @Environment(PersistenceStore.self) + @Environment(AutoFetchController.self) bindings, a .task(id: repoStore.focus?.repo.id) that calls autoFetch.retarget(to: repoStore.focus), .onChange(of: persistence.settings.autoFetchEnabled) calling retarget to re-evaluate the toggle, and .onDisappear calling autoFetch.stop(). Settings > General already binds persistence.setAutoFetchEnabled(_:); verified it routes correctly by running the full KiteTests suite. Added Tests/KiteTests/ViewModelTests/AutoFetchControllerTests.swift (6 tests using bare + author + tracker fixture pattern, 1s interval override, UserDefaults(suiteName:) per test, indirect observation via git rev-parse origin/main). Added Tests/KiteUITests/AutoFetchUITests.swift (2 authored XCUITests gated with XCTSkipIf, rationale: production 5-min interval is too long for a CI XCUITest window without an interval-override launch-arg hook; timer behavior is instead covered by the ViewModelTests suite).",
+  "whatWasLeftUndone": "XCUITest suite is authored but intentionally skipped — both tests XCTSkipIf with documented rationale. Timer correctness is covered by the ViewModel tests with a 1s override. A future feature could add a -KITE_FIXTURE_AUTOFETCH_INTERVAL launch arg (gated on isRunningUnderXCTest) to un-skip the XCUI suite; not in scope for M5-auto-fetch.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Project regenerated cleanly." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests", "exitCode": 0, "observation": "201 tests in 30 suites passed after ~97s (includes the 6 new AutoFetchControllerTests)." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests/AutoFetchControllerTests", "exitCode": 0, "observation": "6 of 6 AutoFetchController tests passed after ~17s." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/118 files require formatting." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Found 0 violations, 0 serious in 118 files." }
+    ],
+    "interactiveChecks": [
+      { "action": "UI verification deferred: XCUITest harness blocked by host TCC; authored suite Tests/KiteUITests/AutoFetchUITests.swift is committed with XCTSkipIf gates and documented rationale. Timer behavior is covered by KiteTests/AutoFetchControllerTests against real bare-upstream fixtures.", "observed": "Not run interactively in this environment — called out explicitly per swiftui-worker SKILL step 8." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/ViewModelTests/AutoFetchControllerTests.swift",
+        "cases": [
+          { "name": "stopsWhenNoFocus", "verifies": "VAL-NET-007" },
+          { "name": "startsTimerWhenFocused", "verifies": "VAL-NET-006" },
+          { "name": "cancelsOnFocusChange", "verifies": "VAL-NET-007" },
+          { "name": "respectsDisabledToggle", "verifies": "VAL-NET-006" },
+          { "name": "reactsToToggleEnable", "verifies": "VAL-NET-006" },
+          { "name": "stopHardStops", "verifies": "VAL-NET-006" }
+        ]
+      },
+      {
+        "file": "Tests/KiteUITests/AutoFetchUITests.swift",
+        "cases": [
+          { "name": "testToggleDisablesAutoFetch", "verifies": "VAL-NET-006" },
+          { "name": "testToggleEnablesAutoFetch", "verifies": "VAL-NET-006" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "AutoFetchUITests is committed with both cases XCTSkipIf'd because the production AutoFetchController interval is 300s and there's no interval-override launch-arg hook yet. A later feature (candidate: M8-commands-and-menu or a dedicated test-harness feature) could add `-KITE_FIXTURE_AUTOFETCH_INTERVAL <seconds>` gated on isRunningUnderXCTest to un-skip these tests.",
+      "affectsFeature": "M8-commands-and-menu"
+    }
+  ]
+}
