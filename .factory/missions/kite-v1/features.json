@@ -560,7 +560,8 @@
         "VAL-DIFF-005",
         "VAL-DIFF-007"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "9ddbf6f"
     },
     {
       "id": "M7-commit-diff",
@@ -583,7 +584,9 @@
         "VAL-DIFF-006",
         "VAL-GRAPH-009"
       ],
-      "status": "pending"
+      "status": "completed-code-only",
+      "testDebt": ["CommitDiffModelTests", "CommitDiffSnapshotTests", "CommitDiffUITests", "handoff-JSON"],
+      "note": "worker rate-limited mid-task; orchestrator landed wiring fix; tests must be added in M7-fix-commit-diff-tests next session"
     },
     {
       "id": "M8-commands-and-menu",

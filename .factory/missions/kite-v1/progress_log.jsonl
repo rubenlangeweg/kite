@@ -102,3 +102,12 @@
 {"event":"scrutiny_complete","milestone":"branch-ops","round":1,"status":"pass-with-non-blocking-issues","blockingIssues":0,"nonBlockingIssues":7,"timestamp":"2026-04-19T00:00:00Z"}
 {"event":"shared_state_update","file":"INTERFACES.md","description":"Tightened observer fan-out rule: RepoDetailModel consolidation is a hard pre-req for M7 (5 observers incoming)","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"feature_start","featureId":"M1-fix-git-run-drain","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M1-fix-git-run-drain","status":"completed","commit":"6e511b0","testsAdded":2,"totalTestsGreen":221,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_start","milestone":"diff","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M7-uncommitted-diff","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M7-uncommitted-diff","status":"completed","commit":"9ddbf6f","testsAdded":16,"totalTestsGreen":276,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M7-commit-diff","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"worker_rate_limit","featureId":"M7-commit-diff","agentId":"ac0741c300721393a","toolUses":51,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"orchestrator_repair","featureId":"M7-commit-diff","description":"Added nonisolated to static parsers; wired GraphView → DiffPaneSelection; build+lint+existing tests green","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete_partial","featureId":"M7-commit-diff","status":"completed-code-only","commit":"<pending>","testDebt":["CommitDiffModelTests","CommitDiffSnapshotTests","CommitDiffUITests","handoff JSON"],"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_features_complete_partial","milestone":"diff","featuresCompleted":2,"testDebt":"M7-commit-diff tests","timestamp":"2026-04-19T00:00:00Z"}
