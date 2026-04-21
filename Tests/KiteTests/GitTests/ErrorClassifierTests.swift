@@ -47,6 +47,33 @@ struct ErrorClassifierTests {
             ClassifierCase(
                 stderr: "fatal: not a git repository (or any of the parent directories): .git",
                 expected: .notARepoKind
+            ),
+            ClassifierCase(
+                stderr: """
+                remote: error: hook declined: you cannot commit to main outside office hours
+                remote: error: failed to push some refs to 'git@github.com:org/repo'
+                 ! [remote rejected] main -> main (hook declined)
+                error: failed to push some refs to 'git@github.com:org/repo'
+                """,
+                expected: .hookRejectedKind
+            ),
+            ClassifierCase(
+                stderr: """
+                remote: error: GH006: Protected branch update failed for refs/heads/main.
+                remote: error: Changes must be made through a pull request.
+                To github.com:org/repo.git
+                 ! [remote rejected] main -> main (protected branch hook declined)
+                error: failed to push some refs to 'github.com:org/repo.git'
+                """,
+                expected: .protectedBranchKind
+            ),
+            ClassifierCase(
+                stderr: """
+                remote: error: denying non-fast-forward refs/heads/main (you should pull first)
+                 ! [remote rejected] main -> main (denying non-fast-forward)
+                error: failed to push some refs to 'git@server.local:repo'
+                """,
+                expected: .remoteRejectedKind
             )
         ]
     )
@@ -58,11 +85,88 @@ struct ErrorClassifierTests {
              (.some(.noUpstream), .noUpstreamKind),
              (.some(.dirtyWorkingTree), .dirtyWorkingTreeKind),
              (.some(.networkUnreachable), .networkUnreachableKind),
-             (.some(.notAGitRepository), .notARepoKind):
+             (.some(.notAGitRepository), .notARepoKind),
+             (.some(.hookRejected), .hookRejectedKind),
+             (.some(.protectedBranch), .protectedBranchKind),
+             (.some(.remoteRejected), .remoteRejectedKind):
             break
         default:
             Issue.record("Expected \(fixture.expected) for stderr: \(fixture.stderr), got \(String(describing: error))")
         }
+    }
+
+    @Test("hookRejected extracts the reason text after 'hook declined:'")
+    func hookRejectedReasonExtraction() {
+        let stderr = """
+        remote: error: hook declined: you cannot commit to main outside office hours
+        remote: error: failed to push some refs to 'git@github.com:org/repo'
+         ! [remote rejected] main -> main (hook declined)
+        error: failed to push some refs to 'git@github.com:org/repo'
+        """
+        let error = ErrorClassifier.classify(stderr: stderr, exitCode: 1)
+        guard case let .hookRejected(detail) = error else {
+            Issue.record("Expected .hookRejected, got \(String(describing: error))")
+            return
+        }
+        #expect(detail == "you cannot commit to main outside office hours")
+    }
+
+    @Test("protectedBranch extracts the actionable follow-up line from a GH006 rejection")
+    func protectedBranchDetailExtraction() {
+        let stderr = """
+        remote: error: GH006: Protected branch update failed for refs/heads/main.
+        remote: error: Changes must be made through a pull request.
+        To github.com:org/repo.git
+         ! [remote rejected] main -> main (protected branch hook declined)
+        error: failed to push some refs to 'github.com:org/repo.git'
+        """
+        let error = ErrorClassifier.classify(stderr: stderr, exitCode: 1)
+        guard case let .protectedBranch(detail) = error else {
+            Issue.record("Expected .protectedBranch, got \(String(describing: error))")
+            return
+        }
+        #expect(detail == "Changes must be made through a pull request.")
+    }
+
+    @Test("remoteRejected captures a reasonable detail for a generic denial")
+    func remoteRejectedDetailExtraction() {
+        let stderr = """
+        remote: error: denying non-fast-forward refs/heads/main (you should pull first)
+         ! [remote rejected] main -> main (denying non-fast-forward)
+        error: failed to push some refs to 'git@server.local:repo'
+        """
+        let error = ErrorClassifier.classify(stderr: stderr, exitCode: 1)
+        guard case let .remoteRejected(detail) = error else {
+            Issue.record("Expected .remoteRejected, got \(String(describing: error))")
+            return
+        }
+        #expect(detail.lowercased().contains("denying"))
+    }
+
+    @Test("hookRejected pattern beats the bare [remote rejected] footer")
+    func hookRejectedBeatsRemoteRejected() {
+        let stderr = """
+        remote: error: pre-receive hook declined
+        remote: error: hook declined: commit message format invalid
+         ! [remote rejected] main -> main (pre-receive hook declined)
+        error: failed to push some refs to 'git@host:org/repo'
+        """
+        let error = ErrorClassifier.classify(stderr: stderr, exitCode: 1)
+        if case .hookRejected = error { return }
+        Issue.record("Expected .hookRejected to win over .remoteRejected, got \(String(describing: error))")
+    }
+
+    @Test("protectedBranch pattern beats the bare [remote rejected] footer")
+    func protectedBranchBeatsRemoteRejected() {
+        let stderr = """
+        remote: error: GH006: Protected branch update failed for refs/heads/main.
+        remote: error: At least 1 approving review is required.
+         ! [remote rejected] main -> main (protected branch hook declined)
+        error: failed to push some refs to 'github.com:org/repo.git'
+        """
+        let error = ErrorClassifier.classify(stderr: stderr, exitCode: 1)
+        if case .protectedBranch = error { return }
+        Issue.record("Expected .protectedBranch to win over .remoteRejected, got \(String(describing: error))")
     }
 
     @Test("returns nil for unknown stderr")
@@ -122,6 +226,9 @@ enum ClassifierKind {
     case dirtyWorkingTreeKind
     case networkUnreachableKind
     case notARepoKind
+    case hookRejectedKind
+    case protectedBranchKind
+    case remoteRejectedKind
 }
 
 struct ClassifierCase: CustomStringConvertible {

@@ -1,0 +1,40 @@
+{
+  "featureId": "M1-fix-git-error-push-cases",
+  "salientSummary": "Added 3 new GitError cases (remoteRejected, hookRejected, protectedBranch) plus ErrorClassifier stderr patterns + 6 new Swift Testing cases. Specific patterns (protectedBranch, hookRejected) are checked before the generic remoteRejected, and all three are checked before the local-side nonFastForward hint so that server-side 'denying non-fast-forward' surfaces as remoteRejected. Unblocks M5-pull-push toasts.",
+  "whatWasImplemented": "Sources/Git/GitError.swift: 3 new cases with LocalizedError strings shaped for toast rendering. Sources/Git/ErrorClassifier.swift: pattern block added and placed BEFORE the non-fast-forward check. Three private extractor helpers (hookDeclinedReason, protectedBranchDetail, remoteRejectedReason) pull an actionable detail line from multi-line stderr (e.g. the 'Changes must be made through a pull request.' follow-up after GH006, or the suffix of 'hook declined: <reason>'). Tests/KiteTests/GitTests/ErrorClassifierTests.swift: 3 fixtures added to the parameterised suite (hookRejected, protectedBranch, remoteRejected), 3 detail-extraction tests, and 2 precedence tests (hookRejected/protectedBranch beat the bare [remote rejected] footer). ClassifierKind enum gained 3 kinds.",
+  "whatWasLeftUndone": "None for this fix feature. Toast rendering of the new cases is owned by M5-pull-push.",
+  "verification": {
+    "commandsRun": [
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/97 files require formatting." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Found 0 violations, 0 serious in 97 files." },
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Created project at /Users/ruben/Developer/gitruben/kite/Kite.xcodeproj" },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "** BUILD SUCCEEDED **" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests", "exitCode": 0, "observation": "Test run with 169 tests in 24 suites passed after 57.488s. ErrorClassifier suite: 10 tests passed, parameterised case now runs 11 argument fixtures." }
+    ],
+    "interactiveChecks": []
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/GitTests/ErrorClassifierTests.swift",
+        "cases": [
+          { "name": "classifies known git stderr patterns [hookRejected fixture]", "verifies": "VAL-PARSE-007 (push hook rejection)" },
+          { "name": "classifies known git stderr patterns [protectedBranch fixture]", "verifies": "VAL-PARSE-007 (GH006 protected branch)" },
+          { "name": "classifies known git stderr patterns [remoteRejected fixture]", "verifies": "VAL-PARSE-007 (generic remote denial)" },
+          { "name": "hookRejectedReasonExtraction", "verifies": "Extracts exact reason after 'hook declined:'" },
+          { "name": "protectedBranchDetailExtraction", "verifies": "Extracts GH006 follow-up line 'Changes must be made through a pull request.'" },
+          { "name": "remoteRejectedDetailExtraction", "verifies": "Captures 'denying' substring in the rejection detail" },
+          { "name": "hookRejectedBeatsRemoteRejected", "verifies": "Specific hookRejected pattern precedes generic remoteRejected" },
+          { "name": "protectedBranchBeatsRemoteRejected", "verifies": "Specific protectedBranch pattern precedes generic remoteRejected" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "Previously, a server-side 'remote: error: denying non-fast-forward' would classify as GitError.nonFastForward because the non-fast-forward check came before any push-rejection check. After this feature, push-rejection patterns (protectedBranch, hookRejected, remoteRejected) run first, so server-denial messages are attributed to the remote rather than to the user's local branch state. Behaviour change is intentional and consistent with the spec for M1-fix-git-error-push-cases; the existing nonFastForward fixture still classifies correctly because it uses '[rejected]' not '[remote rejected]' and has no 'denying' text.",
+      "affectsFeature": "M5-pull-push"
+    }
+  ]
+}

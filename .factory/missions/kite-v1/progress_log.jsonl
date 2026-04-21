@@ -73,3 +73,7 @@
 {"event":"scrutiny_complete","milestone":"graph","round":1,"status":"pass-with-non-blocking-issues","blockingIssues":0,"nonBlockingIssues":10,"timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_complete","milestone":"graph","testsGreen":195,"commits":4,"timestamp":"2026-04-19T00:00:00Z"}
 {"event":"m5_blocker","feature":"M5-pull-push","reason":"needs M1-fix-git-error-push-cases first","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"mission_resume","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"user_fix_applied","file":"Sources/Views/Sidebar/RepoSidebarView.swift+RepoSidebarModel.swift","description":"Sidebar click-to-focus: @Bindable + $model.selection pattern replacing manual Binding wrapper","note":"user-authored fix, tests green","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_start","milestone":"net-ops","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M1-fix-git-error-push-cases","timestamp":"2026-04-19T00:00:00Z"}

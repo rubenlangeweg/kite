@@ -11,6 +11,9 @@ enum GitError: Error, Equatable {
     case dirtyWorkingTree(String)
     case networkUnreachable(String)
     case notAGitRepository(String)
+    case remoteRejected(String)
+    case hookRejected(String)
+    case protectedBranch(String)
     case cancelled
 }
 
@@ -34,6 +37,12 @@ extension GitError: LocalizedError {
             return "Network unreachable. \(detail)"
         case let .notAGitRepository(detail):
             return "Not a git repository. \(detail)"
+        case let .remoteRejected(detail):
+            return "Remote rejected the push: \(detail). Check the server-side response — usually a policy or hook rejection."
+        case let .hookRejected(detail):
+            return "A pre-receive or update hook rejected the push: \(detail)"
+        case let .protectedBranch(detail):
+            return "Branch is protected on the remote: \(detail). Open a pull request or push to a different branch."
         case .cancelled:
             return "Operation cancelled."
         }
