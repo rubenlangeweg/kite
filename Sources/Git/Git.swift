@@ -26,6 +26,14 @@ enum Git {
     /// Run `/usr/bin/git` with the given args and cwd, returning captured
     /// stdout/stderr/exit. Non-zero exit is NOT thrown — the caller decides
     /// via `GitResult.throwIfFailed(classifier:)` or by inspecting `exitCode`.
+    ///
+    /// Both stdout and stderr are drained CONCURRENTLY with the child via
+    /// `FileHandle.readabilityHandler` callbacks writing into lock-guarded
+    /// byte buffers. A post-termination `readToEnd()` flushes any tail bytes
+    /// that remained in the pipe after EOF. This avoids the ~64 KB pipe-buffer
+    /// deadlock that afflicted the earlier post-termination-only variant —
+    /// large outputs (`git diff`, `git show`, `git log --patch`, `git archive`)
+    /// would stall the child indefinitely when either pipe filled.
     static func run(
         args: [String],
         cwd: URL,
@@ -39,11 +47,11 @@ enum Git {
         process.standardError = errPipe
         process.standardInput = FileHandle.nullDevice
 
-        // Drain pipes on separate tasks to avoid the pipe-buffer deadlock
-        // git can cause with large stderr during `Counting objects` phases.
-        // See library/git-cli-integration.md §11.
         let outHandle = outPipe.fileHandleForReading
         let errHandle = errPipe.fileHandleForReading
+
+        let stdoutAccum = ByteAccumulator()
+        let stderrAccum = ByteAccumulator()
 
         // Track cancellation separately from Task.isCancelled so the terminationHandler
         // (running on a random DispatchQueue) can see it.
@@ -52,11 +60,19 @@ enum Git {
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<GitResult, Error>) in
+                attachDrainingHandlers(
+                    stdoutHandle: outHandle,
+                    stderrHandle: errHandle,
+                    stdoutAccum: stdoutAccum,
+                    stderrAccum: stderrAccum
+                )
                 process.terminationHandler = { proc in
-                    let outData: Data = (try? outHandle.readToEnd() ?? Data()) ?? Data()
-                    let errData: Data = (try? errHandle.readToEnd() ?? Data()) ?? Data()
-                    let stdout = String(bytes: outData, encoding: .utf8) ?? ""
-                    let stderr = String(bytes: errData, encoding: .utf8) ?? ""
+                    let (stdout, stderr) = finalizeAccumulators(
+                        stdoutHandle: outHandle,
+                        stderrHandle: errHandle,
+                        stdoutAccum: stdoutAccum,
+                        stderrAccum: stderrAccum
+                    )
                     if cancelFlag.isSet {
                         // SIGTERM from our cancellation handler. Surface as .cancelled
                         // rather than a generic non-zero exit so callers can distinguish.
@@ -72,6 +88,8 @@ enum Git {
                 do {
                     try process.run()
                 } catch {
+                    outHandle.readabilityHandler = nil
+                    errHandle.readabilityHandler = nil
                     cont.resume(throwing: GitError.missingExecutable(
                         "Failed to launch /usr/bin/git: \(error.localizedDescription)"
                     ))
@@ -83,6 +101,53 @@ enum Git {
                 process.terminate()
             }
         }
+    }
+
+    /// Wire `readabilityHandler` on each pipe to drain bytes into the matching
+    /// accumulator while the child runs. Handlers self-detach on EOF.
+    private static func attachDrainingHandlers(
+        stdoutHandle: FileHandle,
+        stderrHandle: FileHandle,
+        stdoutAccum: ByteAccumulator,
+        stderrAccum: ByteAccumulator
+    ) {
+        stdoutHandle.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+            } else {
+                stdoutAccum.append(data)
+            }
+        }
+        stderrHandle.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+            } else {
+                stderrAccum.append(data)
+            }
+        }
+    }
+
+    /// Called from `terminationHandler`. Detaches the readability handlers,
+    /// flushes any residual bytes (anything sitting in the kernel pipe buffer
+    /// after the child's final write but before EOF propagated through the
+    /// dispatch source), and returns the UTF-8 decoded strings.
+    private static func finalizeAccumulators(
+        stdoutHandle: FileHandle,
+        stderrHandle: FileHandle,
+        stdoutAccum: ByteAccumulator,
+        stderrAccum: ByteAccumulator
+    ) -> (stdout: String, stderr: String) {
+        stdoutHandle.readabilityHandler = nil
+        stderrHandle.readabilityHandler = nil
+        if let tail = try? stdoutHandle.readToEnd(), !tail.isEmpty {
+            stdoutAccum.append(tail)
+        }
+        if let tail = try? stderrHandle.readToEnd(), !tail.isEmpty {
+            stderrAccum.append(tail)
+        }
+        return (stdoutAccum.utf8String(), stderrAccum.utf8String())
     }
 
     /// Stream git stdout/stderr line-by-line. Terminal event is `.completed`.
@@ -230,6 +295,30 @@ enum Git {
         process.currentDirectoryURL = cwd
         process.environment = buildEnvironment(extra: extraEnv)
         return process
+    }
+}
+
+/// Thread-safe byte accumulator for `Git.run` pipe draining. Lock-guarded
+/// rather than actor-based so it can be appended to synchronously from
+/// `FileHandle.readabilityHandler` (which runs on an internal dispatch
+/// source) AND from the `terminationHandler` (which runs on an arbitrary
+/// DispatchQueue) without hopping through an async Task. Using a Task-based
+/// actor would have risked the continuation resuming before the last append
+/// landed.
+private final class ByteAccumulator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var buffer = Data()
+
+    func append(_ data: Data) {
+        lock.lock()
+        buffer.append(data)
+        lock.unlock()
+    }
+
+    func utf8String() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return String(data: buffer, encoding: .utf8) ?? ""
     }
 }
 
