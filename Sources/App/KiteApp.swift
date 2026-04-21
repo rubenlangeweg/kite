@@ -12,6 +12,7 @@ struct KiteApp: App {
     @State private var autoFetchController: AutoFetchController
     @State private var branchOps: BranchOps
     @State private var diffPaneSelection: DiffPaneSelection
+    @State private var appCommands: AppCommands
 
     init() {
         let store = PersistenceStore()
@@ -38,8 +39,16 @@ struct KiteApp: App {
         let ops = NetworkOps(toasts: toasts, progress: progress)
         _networkOps = State(wrappedValue: ops)
         _autoFetchController = State(wrappedValue: AutoFetchController(ops: ops, persistence: store))
-        _branchOps = State(wrappedValue: BranchOps(toasts: toasts))
+        let branches = BranchOps(toasts: toasts)
+        _branchOps = State(wrappedValue: branches)
         _diffPaneSelection = State(wrappedValue: DiffPaneSelection())
+        _appCommands = State(wrappedValue: AppCommands(
+            store: repos,
+            networkOps: ops,
+            branchOps: branches,
+            sidebar: model,
+            toasts: toasts
+        ))
     }
 
     private static var isRunningUnderXCTest: Bool {
@@ -47,7 +56,10 @@ struct KiteApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Kite") {
+        // Window id "main" so `openWindow(id: "main")` — driven by ⌘N via
+        // `KiteCommands` — can spawn a second independent instance
+        // (VAL-UI-009).
+        WindowGroup("Kite", id: "main") {
             RootView()
                 .frame(minWidth: 900, minHeight: 600)
                 .environment(persistence)
@@ -59,6 +71,12 @@ struct KiteApp: App {
                 .environment(autoFetchController)
                 .environment(branchOps)
                 .environment(diffPaneSelection)
+                .environment(appCommands)
+                // `.focusedSceneValue` makes `appCommands` available to the
+                // `Commands` builder via `@FocusedValue(\.appCommands)` —
+                // `Commands` sits outside the view tree so plain
+                // `.environment(...)` won't reach it.
+                .focusedSceneValue(\.appCommands, appCommands)
         }
         .windowResizability(.contentSize)
         .commands {
@@ -76,6 +94,7 @@ struct KiteApp: App {
                 .environment(autoFetchController)
                 .environment(branchOps)
                 .environment(diffPaneSelection)
+                .environment(appCommands)
         }
     }
 

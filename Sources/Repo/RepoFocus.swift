@@ -97,4 +97,12 @@ final class RepoFocus {
         watcher?.stop()
         watcher = nil
     }
+
+    /// Programmatically re-fire the FSEvents-style "something changed" tick
+    /// so every observer of `focus.lastChangeAt` reloads. Used by the ⌘R
+    /// menu action (M8-commands-and-menu) — same effect as an external
+    /// `git commit` firing FSEvents, minus the disk activity.
+    func forceRefresh() {
+        lastChangeAt = .init()
+    }
 }

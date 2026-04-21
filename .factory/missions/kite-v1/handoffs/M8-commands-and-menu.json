@@ -1,0 +1,86 @@
+{
+  "featureId": "M8-commands-and-menu",
+  "salientSummary": "Added AppCommands @Observable service bridging ⌘R/⌘⇧F/⌘⇧P/⌘⇧K/⌘⇧N menu actions to the underlying services, wired KiteCommands with a Repository CommandMenu + a new-window CommandGroup(replacing: .newItem) for ⌘N, gave WindowGroup id 'main' so openWindow(id:'main') spawns a second instance, and added forceRefresh() to RepoFocus so ⌘R re-fires downstream observers. 7 AppCommands ViewModel tests green + XCUITest stubs. Validation gate (build + all 244 tests + swiftformat --lint + swiftlint --strict) exits 0 under the 11-entry skip-list. ⌘T (switch branch) deferred: no branch-picker UI exists to invoke.",
+  "whatWasImplemented": "Sources/ViewModels/AppCommands.swift: new @Observable @MainActor service with refreshFocused() / fetchFocused() / pullFocused() / pushFocused() / openNewBranchSheet(); newBranchRequest UUID published for the toolbar button to observe; hasFocus convenience. Sources/App/Commands.swift: rewrote KiteCommands with CommandGroup(replacing: .newItem) firing openWindow(id: 'main') for ⌘N, and a CommandMenu('Repository') with ⌘R refresh / ⌘⇧F fetch / ⌘⇧P pull / ⌘⇧K push / ⌘⇧N new-branch items — all gated via @FocusedValue(\\.appCommands)?.hasFocus. Added AppCommandsFocusedKey + FocusedValues.appCommands extension so CommandMenu (outside the view tree) reads the current window's service. Sources/App/KiteApp.swift: added @State var appCommands, set WindowGroup id 'main', injected via .environment(appCommands) on WindowGroup + Settings, and .focusedSceneValue(\\.appCommands, appCommands) on WindowGroup. Sources/Repo/RepoFocus.swift: added forceRefresh() that stamps lastChangeAt = Date() so every onChange-of-focus.lastChangeAt observer reloads (identical to an FSEvents fire, minus disk activity). Sources/Views/Toolbar/NewBranchButton.swift: @Environment(AppCommands.self) + .onChange(of: appCommands.newBranchRequest) opens showSheet when non-nil and focus is present — one sheet, two trigger surfaces.",
+  "whatWasLeftUndone": "⌘T (switch branch) not wired: v1 has no branch-picker UI; switching is driven by double-clicking a branch row. Documented in KiteCommands doc comment and deferred to a follow-up that introduces a dedicated picker. XCUITest CommandsUITests.swift stubs each shortcut scenario with XCTSkipIf — matches the pattern used in FetchUITests / CreateBranchUITests / etc. until the host accepts macOS TCC Accessibility + Automation prompts for Xcode.",
+  "verification": {
+    "commandsRun": [
+      {
+        "command": "xcodegen generate",
+        "exitCode": 0,
+        "observation": "Created project at /Users/ruben/Developer/gitruben/kite/Kite.xcodeproj"
+      },
+      {
+        "command": "xcodebuild -scheme Kite -configuration Debug build",
+        "exitCode": 0,
+        "observation": "** BUILD SUCCEEDED **"
+      },
+      {
+        "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:<11 snapshot suites>",
+        "exitCode": 0,
+        "observation": "Test run with 244 tests in 38 suites passed after 117.6s. AppCommands suite: 7 of 7 tests passed in 5.976s (refreshFocused bumps lastChangeAt; fetch/pull/push drive NetworkOps; openNewBranchSheet bumps newBranchRequest; hasFocus tracks store.focus; async actions no-op without focus)."
+      },
+      {
+        "command": "swiftformat Sources Tests --lint",
+        "exitCode": 0,
+        "observation": "0/147 files require formatting"
+      },
+      {
+        "command": "swiftlint --strict",
+        "exitCode": 0,
+        "observation": "Done linting! Found 0 violations, 0 serious in 147 files."
+      }
+    ],
+    "interactiveChecks": [
+      {
+        "action": "Cannot interactively launch Kite from this worker environment (no display + sandbox); build + unit-test gate both green confirms menu wiring compiles and the AppCommands service behaves. Manual confirmation of ⌘N spawning a second window and menu items showing their bindings is deferred to the user-testing-validator-polish feature.",
+        "observed": "n/a — documented deferment"
+      }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/ViewModelTests/AppCommandsTests.swift",
+        "cases": [
+          { "name": "refreshFocused bumps focus.lastChangeAt", "verifies": "VAL-UI-003" },
+          { "name": "fetchFocused drives NetworkOps.fetch on the focused repo", "verifies": "VAL-UI-003" },
+          { "name": "pullFocused drives NetworkOps.pullFFOnly on the focused repo", "verifies": "VAL-UI-003" },
+          { "name": "pushFocused drives NetworkOps.push on the focused repo", "verifies": "VAL-UI-003" },
+          { "name": "openNewBranchSheet bumps newBranchRequest when a repo is focused", "verifies": "VAL-UI-003" },
+          { "name": "hasFocus reflects store.focus presence", "verifies": "VAL-UI-002" },
+          { "name": "async actions are no-ops without a focused repo", "verifies": "VAL-UI-002" }
+        ]
+      },
+      {
+        "file": "Tests/KiteUITests/CommandsUITests.swift",
+        "cases": [
+          { "name": "testRefreshShortcutFiresRepositoryRefresh", "verifies": "VAL-UI-003 (XCTSkipIf stub pending host TCC)" },
+          { "name": "testFetchShortcutFiresRepositoryFetch", "verifies": "VAL-UI-003 (XCTSkipIf stub pending host TCC)" },
+          { "name": "testPullShortcutFiresRepositoryPull", "verifies": "VAL-UI-003 (XCTSkipIf stub pending host TCC)" },
+          { "name": "testPushShortcutFiresRepositoryPush", "verifies": "VAL-UI-003 (XCTSkipIf stub pending host TCC)" },
+          { "name": "testNewBranchShortcutOpensSheet", "verifies": "VAL-UI-003 (XCTSkipIf stub pending host TCC)" },
+          { "name": "testNewWindowShortcutOpensSecondWindow", "verifies": "VAL-UI-009 (XCTSkipIf stub pending host TCC)" },
+          { "name": "testSettingsShortcutStillOpensSettings", "verifies": "VAL-UI-003 (XCTSkipIf stub pending host TCC)" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "File-ownership note: INTERFACES.md §3 lists Sources/Repo/*.swift as git-engine-worker territory, but the feature brief explicitly lists Sources/Repo/RepoFocus.swift in this swiftui-worker's ownership (adding forceRefresh()). I followed the brief since the forceRefresh() method is UI-driven (⌘R menu action) and doesn't affect git semantics. Scrutiny may want to either amend INTERFACES.md or move forceRefresh() to a new Sources/ViewModels wrapper.",
+      "affectsFeature": "scrutiny-validator-polish"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "⌘T (switch branch) deferred: v1 has no branch-picker UI for the shortcut to invoke — the only switch surface is double-clicking a branch row in the list. Either (a) accept the deferment, (b) add a follow-up feature for a command-palette-style picker, or (c) re-map ⌘T to focus the branch list. VAL-UI-003 enumerates ⌘T in the spec so scrutiny should explicitly confirm the deferment.",
+      "affectsFeature": "scrutiny-validator-polish"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "On focus swap during a mid-flight ⌘⇧K push, AppCommands.pushFocused still operates against the originally-focused repo (captured via store.focus at entry). That's correct — cancelling mid-push would confuse users — but scrutiny should confirm the behaviour matches spec. Same mental model as the toolbar Push button.",
+      "affectsFeature": "scrutiny-validator-polish"
+    }
+  ]
+}

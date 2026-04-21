@@ -7,15 +7,18 @@ import SwiftUI
 /// either success or failure the sheet is dismissed — the outcome surfaces
 /// via `ToastCenter` so the sheet doesn't have to double-render errors.
 ///
-/// The ⌘⇧N keyboard shortcut is wired in M8-commands-and-menu (spec §4);
-/// for M6-create-branch this button + the App menu entry (future) are the
-/// only surfaces.
+/// ⌘⇧N (M8-commands-and-menu) also routes to this button's sheet: the
+/// menu bumps `AppCommands.newBranchRequest` and the `.onChange` observer
+/// below opens the sheet just like a click. Keeps sheet ownership in one
+/// place while letting multiple surfaces invoke it.
 ///
-/// Fulfills: VAL-BRANCHOP-001 (toolbar surface that opens the sheet),
-/// VAL-UI-002 (toolbar button for new-branch).
+/// Fulfills: VAL-BRANCHOP-001 (toolbar + menu surface that opens the sheet),
+/// VAL-UI-002 (toolbar button for new-branch), VAL-UI-003 (⌘⇧N menu entry
+/// opens the same sheet).
 struct NewBranchButton: View {
     @Environment(RepoStore.self) private var store
     @Environment(BranchOps.self) private var ops
+    @Environment(AppCommands.self) private var appCommands
 
     @State private var showSheet: Bool = false
 
@@ -43,6 +46,13 @@ struct NewBranchButton: View {
                     showSheet = false
                 }
             )
+        }
+        // ⌘⇧N from the Repository menu bumps `newBranchRequest`. A nil →
+        // non-nil transition opens the sheet; any subsequent bump (new
+        // UUID) also opens it even if the sheet was dismissed in between.
+        .onChange(of: appCommands.newBranchRequest) { _, newValue in
+            guard newValue != nil, store.focus != nil else { return }
+            showSheet = true
         }
     }
 
