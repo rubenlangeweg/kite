@@ -1,0 +1,92 @@
+{
+  "featureId": "M8-commands-and-menu",
+  "commit": "2ba0629",
+  "status": "pass-with-non-blocking-issues",
+  "scope": "Wire the App menu and keyboard commands: ⌘R refresh, ⌘⇧F fetch, ⌘⇧P pull, ⌘⇧K push, ⌘⇧N new branch, ⌘N new window; ⌘, is auto-wired by Settings scene; ⌘T deferred (no branch picker UI).",
+  "filesReviewed": [
+    "Sources/ViewModels/AppCommands.swift",
+    "Sources/App/Commands.swift",
+    "Sources/App/KiteApp.swift",
+    "Sources/Repo/RepoFocus.swift",
+    "Sources/Views/Toolbar/NewBranchButton.swift",
+    "Tests/KiteTests/ViewModelTests/AppCommandsTests.swift",
+    "Tests/KiteUITests/CommandsUITests.swift"
+  ],
+  "architectureReview": {
+    "summary": "Clean separation. AppCommands is a thin @MainActor @Observable service bridging menu actions to existing NetworkOps / BranchOps / RepoStore / RepoSidebarModel. It holds no new state except a newBranchRequest UUID used as a sheet-open signal. KiteCommands reads it via @FocusedValue(\\.appCommands); KiteApp injects via .focusedSceneValue on the WindowGroup and plain .environment on Settings. Window id \"main\" lets ⌘N spawn a second identical instance via openWindow(id:).",
+    "goodPractices": [
+      "Established @Observable + @MainActor + @ObservationIgnored discipline on injected dependencies — no retain-cycle risk.",
+      "FocusedValue mechanism correctly routes a second ⌘N window's shortcuts to THAT window's service (same AppCommands instance since it's app-level state).",
+      "openNewBranchSheet() uses a UUID bump — every menu invocation produces a new value so .onChange fires reliably even if the sheet was dismissed in between.",
+      "pushFocused() mirrors PushToolbarButton semantics exactly: .needsUpstream produces a toast redirecting the user to the toolbar (which owns the set-upstream confirmation sheet), avoiding a second sheet entry point.",
+      "AppCommandsTests covers 7 cases with REAL fixture repos and exercises observable side-effects (origin/main advancing, bare's main ref, lastChangeAt bumping, newBranchRequest UUID regeneration)."
+    ],
+    "shortcutCoverage": {
+      "⌘R": "wired — appCommands.refreshFocused() → sidebar.refresh() + focus.forceRefresh()",
+      "⌘⇧F": "wired — appCommands.fetchFocused() → NetworkOps.fetch",
+      "⌘⇧P": "wired — appCommands.pullFocused() → NetworkOps.pullFFOnly",
+      "⌘⇧K": "wired — appCommands.pushFocused() → NetworkOps.push (with .needsUpstream → toast)",
+      "⌘⇧N": "wired — appCommands.openNewBranchSheet() bumps newBranchRequest; NewBranchButton observes and opens sheet",
+      "⌘N": "wired — CommandGroup(replacing: .newItem) Button with keyboardShortcut(\"n\", modifiers: .command) → openWindow(id: \"main\")",
+      "⌘,": "SwiftUI auto-wires via the Settings {} scene — not in KiteCommands",
+      "⌘T": "DEFERRED — no branch picker UI in v1; documented in KiteCommands doc comment and features.json"
+    }
+  },
+  "issues": [
+    {
+      "severity": "medium",
+      "file": "Sources/App/Commands.swift",
+      "line": 28,
+      "description": "@FocusedValue(\\.appCommands) captures the frontmost window's AppCommands value via .focusedSceneValue. Only the primary WindowGroup has that injection — the Settings scene does NOT call .focusedSceneValue(\\.appCommands, ...). If the Settings window is the frontmost window when a shortcut fires, @FocusedValue resolves to nil and menu items show disabled. This is probably intentional (you can't push from Settings), but it is observable behavior: with Settings frontmost, every Repository-menu item is disabled. Scrutiny: acceptable. Worth a one-line comment clarifying intent."
+    },
+    {
+      "severity": "medium",
+      "file": "Sources/App/Commands.swift",
+      "line": 42,
+      "description": "CommandGroup(replacing: .newItem) puts a single \"New Window\" button in File menu. SwiftUI's default .newItem group also contains \"Close\" and \"Save\" placeholder items — replacing wipes all of them. File menu is now {New Window}. Acceptable for v1 (no documents), but the author may want `CommandGroup(after: .newItem)` + a `CommandGroup(replacing: .newItem) { EmptyView() }` combo to preserve standard items if macOS 16 introduces useful ones."
+    },
+    {
+      "severity": "medium",
+      "file": "Sources/ViewModels/AppCommands.swift",
+      "line": 114,
+      "description": "pushFocused() captures `store.focus` at entry and then awaits readCurrentBranch. If focus swaps mid-await, the push runs against the originally-focused repo. Per the handoff's discoveredIssue #3 this is intentional (matches toolbar button behavior) but it should be written as an explicit local binding `let focus = store.focus` — the current code refers to `focus` in scope but reads `store.focus` twice, so two consecutive reads can produce different values. Low risk given the synchronous MainActor guarantee but tighten by hoisting."
+    },
+    {
+      "severity": "medium",
+      "file": "Sources/Repo/RepoFocus.swift",
+      "line": 105,
+      "description": "forceRefresh() lives in Sources/Repo/ which per INTERFACES.md §3 is git-engine-worker territory, but was authored by a swiftui-worker feature. The method is UI-driven (⌘R trigger) with no git semantics. Functionally fine; queue INTERFACES.md §3 amendment to recognize this crossover or re-home to a Sources/ViewModels wrapper."
+    },
+    {
+      "severity": "medium",
+      "file": "Sources/App/Commands.swift",
+      "line": 45,
+      "description": "Button closures capture `let commands = appCommands` before the Task, which is fine, but the same pattern is repeated 5 times with subtle variations. Could be factored into a private helper `dispatch(_ action: @escaping (AppCommands) async -> Void)` returning a Button closure. Not blocking — repetition is explicit and readable."
+    },
+    {
+      "severity": "low",
+      "file": "Sources/App/Commands.swift",
+      "line": 36,
+      "description": "⌘N \"New Window\" is enabled unconditionally, including when the built-in ⌘N (via .newItem) might not have done so in a document-based app. Given Kite isn't document-based, this is correct — a user always can spawn another window regardless of focus. Worth noting, no change needed."
+    },
+    {
+      "severity": "low",
+      "file": "Sources/Views/Toolbar/NewBranchButton.swift",
+      "line": 53,
+      "description": "The .onChange(of: appCommands.newBranchRequest) compares UUID values; on a nil → UUID transition it opens. Subsequent UUID → UUID transitions also open. UUID → nil would not open (guard). This is correct since openNewBranchSheet never writes nil, but a defensive comment locking the contract would help future maintainers."
+    }
+  ],
+  "testsEvidence": {
+    "unitTestsRun": "AppCommands suite: 7/7 green (refreshFocused bumps lastChangeAt; fetch/pull/push drive NetworkOps with REAL fixture repos; openNewBranchSheet bumps UUID; hasFocus tracks store.focus; async actions are no-ops without focus).",
+    "xcuiAuthoredButSkipped": "CommandsUITests.swift — 7 XCTSkipIf-guarded test cases: refresh/fetch/pull/push/new-branch shortcuts, ⌘N new window, ⌘, settings. Consistent with the project-wide TCC deferment pattern (FetchUITests, CreateBranchUITests, etc.)."
+  },
+  "validationAssertionsFulfilled": {
+    "VAL-UI-002": "PASSED (menu parity with toolbar for refresh/fetch/pull/push/new-branch; verified via AppCommands unit tests routing to NetworkOps + BranchOps)",
+    "VAL-UI-003": "PARTIAL (6 of 7 documented shortcuts wired; ⌘T deferred per features.json). Unit tests cover route-through. XCUITest authored but TCC-skipped.",
+    "VAL-UI-009": "PASSED architecturally (WindowGroup id=\"main\" + openWindow(id:) in a Button with ⌘N keyboardShortcut). XCUITest authored but TCC-skipped."
+  },
+  "deferredItems": {
+    "⌘T-switch-branch": "No branch picker UI in v1. Documented as deferment in features.json + KiteCommands doc comment. Queue as v2 candidate."
+  },
+  "verdict": "pass-with-non-blocking-issues"
+}
