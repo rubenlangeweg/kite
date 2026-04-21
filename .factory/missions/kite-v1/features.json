@@ -610,7 +610,8 @@
         "VAL-UI-003",
         "VAL-UI-009"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "2ba0629"
     },
     {
       "id": "M8-app-icon-and-plist",
@@ -631,7 +632,8 @@
         "VAL-PKG-003",
         "VAL-PKG-004"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "b0d4416"
     },
     {
       "id": "M8-release-packaging",
@@ -657,7 +659,8 @@
         "VAL-PKG-006",
         "VAL-NET-010"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "15d6978"
     }
   ],
   "coverage": {
