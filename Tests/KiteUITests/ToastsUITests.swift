@@ -33,10 +33,39 @@ final class ToastsUITests: XCTestCase {
         XCTAssertTrue(host.waitForExistence(timeout: 5), "Toast.Host overlay not found in accessibility tree")
     }
 
-    /// Placeholder for the real click-to-expand detail assertion (VAL-UI-005).
-    /// Requires a trigger path to actually produce an error toast — deferred
-    /// to M5-fetch / M5-pull-push once those surface real auth errors.
-    func testErrorToastClickExpandsDetail_deferredUntilRealTriggerLands() throws {
-        throw XCTSkip("No production trigger for an error toast until M5-fetch / M5-pull-push.")
+    /// VAL-UI-005: clicking an error toast expands a detail panel with the
+    /// captured git stderr. The trigger path is a failing fetch — we create
+    /// a working clone whose bare remote is then deleted out from under it,
+    /// click the Fetch toolbar button, and assert the resulting red sticky
+    /// toast expands on tap.
+    func testErrorToastClickExpandsDetail() throws {
+        let root = try UITestFixtures.makeTempRoot(prefix: "kite-ui-toast-detail")
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: root)
+        }
+        _ = try UITestFixtures.makeRepoWithRemote(named: "toast-detail", under: root)
+        try FileManager.default.removeItem(at: root.appendingPathComponent("toast-detail.git"))
+
+        let app = XCUIApplication()
+        app.launchArguments = ["-KITE_FIXTURE_ROOTS", root.path]
+        app.launch()
+
+        let repoRow = app.staticTexts["toast-detail"].firstMatch
+        XCTAssertTrue(repoRow.waitForExistence(timeout: 10), "fixture repo row missing")
+        repoRow.click()
+
+        let fetchButton = app.buttons["Toolbar.Fetch"].firstMatch
+        XCTAssertTrue(fetchButton.waitForExistence(timeout: 5), "Fetch button missing")
+        fetchButton.click()
+
+        let errorPredicate = NSPredicate(format: "identifier BEGINSWITH %@", "Toast.error.")
+        let errorToast = app.descendants(matching: .any).matching(errorPredicate).firstMatch
+        XCTAssertTrue(errorToast.waitForExistence(timeout: 10), "error toast never appeared")
+
+        errorToast.click()
+        let detail = app.descendants(matching: .any)
+            .matching(identifier: "Toast.Detail")
+            .firstMatch
+        XCTAssertTrue(detail.waitForExistence(timeout: 3), "Toast.Detail did not appear after tap")
     }
 }

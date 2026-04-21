@@ -8,6 +8,7 @@ struct KiteApp: App {
     @State private var sidebarModel: RepoSidebarModel
     @State private var toastCenter: ToastCenter
     @State private var progressCenter: ProgressCenter
+    @State private var networkOps: NetworkOps
 
     init() {
         let store = PersistenceStore()
@@ -27,8 +28,11 @@ struct KiteApp: App {
         let model = RepoSidebarModel(persistence: store, repoStore: repos, rootsOverride: rootsOverride)
         _sidebarModel = State(wrappedValue: model)
 
-        _toastCenter = State(wrappedValue: ToastCenter())
-        _progressCenter = State(wrappedValue: ProgressCenter())
+        let toasts = ToastCenter()
+        let progress = ProgressCenter()
+        _toastCenter = State(wrappedValue: toasts)
+        _progressCenter = State(wrappedValue: progress)
+        _networkOps = State(wrappedValue: NetworkOps(toasts: toasts, progress: progress))
     }
 
     private static var isRunningUnderXCTest: Bool {
@@ -44,6 +48,7 @@ struct KiteApp: App {
                 .environment(sidebarModel)
                 .environment(toastCenter)
                 .environment(progressCenter)
+                .environment(networkOps)
         }
         .windowResizability(.contentSize)
         .commands {
@@ -57,6 +62,7 @@ struct KiteApp: App {
                 .environment(sidebarModel)
                 .environment(toastCenter)
                 .environment(progressCenter)
+                .environment(networkOps)
         }
     }
 

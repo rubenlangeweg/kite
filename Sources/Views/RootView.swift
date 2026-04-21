@@ -27,6 +27,11 @@ struct RootView: View {
             ToolbarItem(placement: .status) {
                 ToolbarProgressIndicator()
             }
+            // VAL-NET-001 / VAL-UI-002: Fetch action in the trailing primary
+            // cluster.
+            ToolbarItem(placement: .primaryAction) {
+                FetchToolbarButton()
+            }
         }
         .overlay(alignment: .bottom) {
             // VAL-UI-004: toast stack anchored at the bottom of the window,
