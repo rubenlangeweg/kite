@@ -1,0 +1,68 @@
+{
+  "milestoneId": "M7-diff",
+  "featureId": "M7-commit-diff",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Selected-commit diff pane (VAL-DIFF-003, VAL-GRAPH-009). CommitDiffModel is a clean @Observable @MainActor model with a single-subprocess design: `git show --format=format:%H%x00%h%x00%an%x00%ae%x00%at%x00%s%x00%b%n --patch <sha>` NUL-separates 7 header fields, emitted in one round-trip with the patch body. A second small subprocess (`git for-each-ref --points-at <sha>`) populates the ref pills. Both run inside the same focus.queue.run closure. Same-SHA de-dup guard (`currentSHA` + early return) prevents wasted subprocesses on SwiftUI-issued redundant `.task(id: sha)` invocations. Cancel-prior-Task via loadTask?.cancel(). splitShowOutput + parseHeaderFields are `nonisolated static` so they can run inside the queue closure without actor-isolation bouncing — correct. DiffPaneSelection is a standalone @Observable @MainActor class, justified by doc-comment (narrow router/graph coordination channel; preserves GraphModel.selectedSHA). DiffPaneSelection injected on BOTH WindowGroup and Settings scenes. GraphView row-tap mirrors GraphModel.select(sha:) into diffSelection.selectedSHA — both stay in sync. DiffPaneRouter switches between CommitDiffView(sha:) and UncommittedDiffView(), clears selection on repo swap via .onChange(store.focus?.repo.id). 8 ViewModel cases + 5 snapshot cases (all md5-distinct) + 3 XCTSkip-gated XCUI stubs. All pass on the current skip-list run (236 tests, 0 failures).",
+    "issues": [
+      {
+        "file": "Sources/ViewModels/CommitDiffModel.swift",
+        "line": 178,
+        "severity": "medium-priority",
+        "description": "splitShowOutput boundary `\\ndiff --git ` is MOSTLY safe — the comment correctly notes %s is the 5th NUL-separated field so a pathological subject `diff --git a/...` can't land at column 0. HOWEVER: %b is the 7th field and CAN contain literal `\\ndiff --git ` text (e.g. a commit body that quotes another commit). The splitter would false-split there. Not a contract violation and doesn't corrupt state (the parser just sees no `diff --git` and returns empty files on a quoted-body commit), but worth a regression test: a commit message containing the literal substring `\\ndiff --git a/x b/y` should still parse its real patch. Consider splitting on `\\n\\ndiff --git ` (double newline = end of header block) which git always emits."
+      },
+      {
+        "file": "Sources/ViewModels/CommitDiffModel.swift",
+        "line": 75,
+        "severity": "medium-priority",
+        "description": "`if sha == currentSHA { return }` short-circuits WITHOUT awaiting the in-flight loadTask. If a second same-SHA load arrives WHILE the first is still in flight, the second caller's `await` completes immediately with partial state (isLoading may still be true, header/files may be empty). For the current call sites (.task(id:)) this is fine because the view doesn't re-query model state until .task fires again. Flag for awareness — document or await-the-in-flight-task if a future call site relies on `await model.load(...)` completing = data-ready."
+      },
+      {
+        "file": "Sources/Views/Diff/CommitDiffView.swift",
+        "line": 32,
+        "severity": "high-priority",
+        "description": "Per-focus observer fan-out count is now 5 (branch list + status header + graph + uncommitted diff + commit diff). INTERFACES.md §4 explicitly said 'consolidate into a shared RepoDetailModel BEFORE the 5th observer' — deferred twice now. Each observer has cancel-prior-Task discipline individually; the aggregate risk is 5 unbounded Tasks per FS tick. M7-commit-diff's Task is keyed on sha (not focus.lastChangeAt) so it doesn't actually spawn on every FS tick — it's selection-driven, which narrows the fan-out count on FS events back to 4. Still, the RepoDetailModel refactor should happen in M8 before any sixth observer is added."
+      },
+      {
+        "file": "Sources/Views/Diff/DiffPaneRouter.swift",
+        "line": 29,
+        "severity": "non-blocking",
+        "description": "onChange(of: store.focus?.repo.id) clears selectedSHA on repo swap. Correct. But if the user selects a commit in repo A, switches to repo B, switches back to repo A — the router shows UncommittedDiffView (selection was cleared). A GitKraken-style 'remember last selected commit per repo' would preserve selection, but that's a v2 polish. Note for future."
+      },
+      {
+        "file": "Sources/Views/Diff/CommitDiffView.swift",
+        "line": 56,
+        "severity": "non-blocking",
+        "description": "ForEach(Array(model.files.enumerated()), id: \\.offset) — same offset-identity concern as UncommittedDiffView. Same reasoning, same medium-priority note, but for commits `git show` output is stably ordered by git so the risk is smaller. Consider (oldPath ?? newPath) keying."
+      },
+      {
+        "file": "Tests/KiteTests/ViewModelTests/CommitDiffModelTests.swift",
+        "line": 236,
+        "severity": "non-blocking",
+        "description": "loadDeDupesRepeatedSHA uses a timing-based proxy (second load < 50ms) to verify the de-dup guard. This is a valid proxy but brittle on a loaded CI host — a cold-cache miss on the first load could push the second-load timing above 50ms spuriously. Consider adding a test hook that counts Git.run invocations, or bumping the threshold to 100ms to survive CI jitter."
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/CommitDiffSnapshotTests.swift",
+        "line": 0,
+        "severity": "non-blocking",
+        "description": "Only 5 snapshot cases cover presentational sub-views (CommitHeaderView + CommitHeaderView+FileDiffView composite). CommitDiffView itself (with RepoStore + DiffPaneSelection env + .task async loading) is not snapshot-covered. Sub-view coverage is structurally sufficient — every visual branch is exercised — but a whole-pane snapshot would catch layout regressions between header and file-list. Deferred to scrutiny-validator-diff."
+      }
+    ]
+  },
+  "contractVerification": {
+    "fulfilled": [
+      "VAL-DIFF-003 (commit diff rendering via CommitDiffModelTests.loadSimpleCommit/loadCommitWithBody + CommitDiffSnapshotTests 5 cases)",
+      "VAL-DIFF-006 (500-line large-commit drain via loadLargeCommit)",
+      "VAL-GRAPH-009 (commit click→diff wiring via DiffPaneSelection code-path + GraphView row-tap mirroring; XCUI deferred)",
+      "VAL-UI-010 (dark-mode parity via testDarkMode)"
+    ],
+    "unverified": [
+      "VAL-GRAPH-009 XCUI proof — authored as XCTSkip pending TCC grant",
+      "VAL-DIFF-006 manual Instruments gate — deferred to scrutiny-validator-diff manual step"
+    ]
+  },
+  "ownership": {
+    "boundariesRespected": true,
+    "notes": "swiftui-worker territory (Sources/ViewModels/CommitDiffModel.swift, Sources/ViewModels/DiffPaneSelection.swift, Sources/Views/Diff/*, Sources/App/KiteApp.swift injection, Sources/Views/RootView.swift router wiring, Sources/Views/Graph/GraphView.swift selection mirror). No git-engine-worker files touched. The GraphView edit is swiftui-worker-owned (Sources/Views/**), so not a crossover — just an additive @Environment binding + row-tap side-effect."
+  }
+}
