@@ -9,6 +9,7 @@ struct KiteApp: App {
     @State private var toastCenter: ToastCenter
     @State private var progressCenter: ProgressCenter
     @State private var networkOps: NetworkOps
+    @State private var autoFetchController: AutoFetchController
 
     init() {
         let store = PersistenceStore()
@@ -32,7 +33,9 @@ struct KiteApp: App {
         let progress = ProgressCenter()
         _toastCenter = State(wrappedValue: toasts)
         _progressCenter = State(wrappedValue: progress)
-        _networkOps = State(wrappedValue: NetworkOps(toasts: toasts, progress: progress))
+        let ops = NetworkOps(toasts: toasts, progress: progress)
+        _networkOps = State(wrappedValue: ops)
+        _autoFetchController = State(wrappedValue: AutoFetchController(ops: ops, persistence: store))
     }
 
     private static var isRunningUnderXCTest: Bool {
@@ -49,6 +52,7 @@ struct KiteApp: App {
                 .environment(toastCenter)
                 .environment(progressCenter)
                 .environment(networkOps)
+                .environment(autoFetchController)
         }
         .windowResizability(.contentSize)
         .commands {
@@ -63,6 +67,7 @@ struct KiteApp: App {
                 .environment(toastCenter)
                 .environment(progressCenter)
                 .environment(networkOps)
+                .environment(autoFetchController)
         }
     }
 

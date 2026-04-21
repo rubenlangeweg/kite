@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct RootView: View {
+    @Environment(RepoStore.self) private var repoStore
+    @Environment(PersistenceStore.self) private var persistence
+    @Environment(AutoFetchController.self) private var autoFetch
+
     var body: some View {
         NavigationSplitView {
             RepoSidebarView()
@@ -47,6 +51,24 @@ struct RootView: View {
             // layout from `NavigationSplitView`.
             ToastHostView()
                 .allowsHitTesting(true)
+        }
+        // VAL-NET-006 / VAL-NET-007: auto-fetch is scoped to the focused repo.
+        // `.task(id:)` re-runs its closure whenever the focused repo changes,
+        // cancelling the task it spawned last time. `retarget` handles the
+        // no-focus case (nil-out) and the toggle-off case internally.
+        .task(id: repoStore.focus?.repo.id) {
+            autoFetch.retarget(to: repoStore.focus)
+        }
+        // Settings toggle flip picks up via this `.onChange` — `retarget`
+        // re-reads `persistence.settings.autoFetchEnabled` and either
+        // re-arms or stays off accordingly.
+        .onChange(of: persistence.settings.autoFetchEnabled) { _, _ in
+            autoFetch.retarget(to: repoStore.focus)
+        }
+        // Window close: hard-stop the timer so no fetch fires against a
+        // repo the user is no longer looking at.
+        .onDisappear {
+            autoFetch.stop()
         }
     }
 }
