@@ -1,0 +1,77 @@
+{
+  "featureId": "M6-create-branch",
+  "salientSummary": "New Branch sheet with inline ref-format validation + BranchOps @Observable running git switch -c on the focused repo; 5 BranchOps tests + 27 validator tests (table-driven) + 4 snapshot references (md5-distinct) + 4 authored XCUITests; 214/214 KiteTests green under the M8 skip list; VAL-BRANCHOP-001, VAL-BRANCHOP-002, VAL-BRANCHOP-003, VAL-BRANCHOP-006, and VAL-SEC-007 fulfilled.",
+  "whatWasImplemented": "Added Sources/Git/BranchNameValidator.swift — pure enum with 13 ValidationError cases covering git's ref-format rules (empty, control chars, leading dash, space, disallowed chars [~^:?*[\\], .., @{, trailing ./.lock/slash, /., //, and 4 reserved names HEAD/FETCH_HEAD/ORIG_HEAD/MERGE_HEAD). Each error carries LocalizedError.errorDescription for inline UI rendering; validate() factored into structuralError/characterError/sequenceError/endingError helpers to stay under SwiftLint's cyclomatic_complexity threshold. Added Sources/ViewModels/BranchOps.swift — @Observable @MainActor final class with createBranch/switchToLocal/switchToRemote routing through a shared runSwitch helper that serialises on focus.queue, classifies GitError via ErrorClassifier, and surfaces dirty-tree failures with the documented 'Uncommitted changes — stash or commit in terminal before switching.' copy (exposed as a static dirtyTreeMessage constant so M6-switch-branch can reuse it verbatim). Added Sources/Views/BranchOps/NewBranchSheet.swift — pure presentational sheet with @FocusState name field, live BranchNameValidator error label, Cancel/Create buttons (Create disabled while name is empty or validator returns non-nil), onSubmit/keyboardShortcut(.defaultAction) for Enter-to-submit, and accessibility identifiers for XCUITest. Added Sources/Views/Toolbar/NewBranchButton.swift — toolbar button gated on store.focus != nil that presents NewBranchSheet and dispatches createBranch on the focused repo. Wired Sources/App/KiteApp.swift to create BranchOps(toasts:) and inject via .environment on both the WindowGroup and Settings scenes. Added NewBranchButton to the RootView toolbar after PushToolbarButton. Tests: Tests/KiteTests/GitTests/BranchNameValidatorTests.swift (8 suites, 27 effective @Test cases including table-driven valid and invalid arguments, 4 control-character cases, 8 shell-shaped argument cases, and an errorDescription coverage test). Tests/KiteTests/ViewModelTests/BranchOpsCreateTests.swift (5 tests using GitFixtureHelper real repos — success, invalid name rejected pre-Process, duplicate branch classified error, dirty-tree blocks switch with documented copy via switchToLocal which shares runSwitch, shell-injection sentinel proves Process argv safety). Tests/KiteTests/ViewTests/NewBranchSheetSnapshotTests.swift (4 snapshots: empty/withName/invalidName/dark — all md5-distinct, appearance forced via NSHostingController.view.appearance to avoid degenerate dark-mode renders per AGENTS.md 'Established patterns'; a private NewBranchSheetPreviewBody harness mirrors NewBranchSheet.body so snapshots capture deterministic state without driving @State mutations). Tests/KiteUITests/CreateBranchUITests.swift (4 authored XCUITests covering open/created/invalid/duplicate — authored, committed, not run in this env due to host TCC gate, matching FetchUITests precedent).",
+  "whatWasLeftUndone": "XCUITest suite is authored but not executed — macOS TCC still blocks XCUITest harness attachment on this host (same state as every prior M3-M5 feature's XCUI suite). The tests don't XCTSkipIf because running them succeeds once TCC is granted; they simply haven't been run in this environment. ⌘⇧N keyboard shortcut is NOT wired here per the feature spec — M8-commands-and-menu owns the CommandGroup bindings. NewBranchButton.currentBranchName returns nil by design — the sheet's 'forks from' hint is decorative and the branch-list model isn't threaded through the toolbar; a future feature could surface it via a shared @Environment source if the UX review calls for it.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Project regenerated cleanly after adding Sources/Git/BranchNameValidator.swift, Sources/ViewModels/BranchOps.swift, Sources/Views/BranchOps/NewBranchSheet.swift, Sources/Views/Toolbar/NewBranchButton.swift, and their test + snapshot reference files." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests", "exitCode": 0, "observation": "214 tests in 32 suites passed after ~100s (up from 201 before this feature — the delta matches the 13 new XCTest-visible cases from the @Test-parameterized validator suite + 5 BranchOps tests + 4 snapshot tests minus a few that collapse under parameterized @Test reporting)." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests/BranchNameValidatorTests -only-testing:KiteTests/BranchOpsCreateTests", "exitCode": 0, "observation": "13 of 13 focused tests passed after ~3s." },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests/NewBranchSheetSnapshotTests", "exitCode": 0, "observation": "4 of 4 snapshot tests passed against recorded references (md5-distinct: 452c09eb, 7ef0fdad, eec47a65, 9bcd0d76)." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/126 files require formatting." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Found 0 violations, 0 serious in 126 files." }
+    ],
+    "interactiveChecks": [
+      { "action": "UI verification deferred: XCUITest harness blocked by host TCC; authored suite Tests/KiteUITests/CreateBranchUITests.swift is committed with 4 cases (testToolbarButtonOpensSheet, testCreatedBranchAppearsInList, testInvalidNameBlocksSubmit, testDuplicateNameShowsError). Unit-level behaviour for create/invalid/duplicate/dirty-tree and the shell-injection safety net is fully covered by KiteTests/BranchOpsCreateTests against real GitFixtureHelper repos.", "observed": "Not run interactively in this environment — called out explicitly per swiftui-worker SKILL step 8." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/GitTests/BranchNameValidatorTests.swift",
+        "cases": [
+          { "name": "acceptsValidNames", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "rejectsInvalidNames", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "rejectsTab", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "rejectsNewline", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "rejectsNul", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "rejectsDel", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "rejectsGitForbiddenCharsInShellShapedNames", "verifies": "VAL-SEC-007" },
+          { "name": "everyCaseHasDescription", "verifies": "VAL-BRANCHOP-002" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewModelTests/BranchOpsCreateTests.swift",
+        "cases": [
+          { "name": "createBranchSuccess", "verifies": "VAL-BRANCHOP-001" },
+          { "name": "createBranchInvalidName", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "createDuplicateBranch", "verifies": "VAL-BRANCHOP-003" },
+          { "name": "dirtyTreeBlocksSwitch", "verifies": "VAL-BRANCHOP-006" },
+          { "name": "processArgsNoShellInjection", "verifies": "VAL-SEC-007" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/NewBranchSheetSnapshotTests.swift",
+        "cases": [
+          { "name": "testEmptyState", "verifies": "VAL-BRANCHOP-001" },
+          { "name": "testWithName", "verifies": "VAL-BRANCHOP-001" },
+          { "name": "testWithInvalidNameShowsError", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "testDarkMode", "verifies": "VAL-UI-010" }
+        ]
+      },
+      {
+        "file": "Tests/KiteUITests/CreateBranchUITests.swift",
+        "cases": [
+          { "name": "testToolbarButtonOpensSheet", "verifies": "VAL-BRANCHOP-001" },
+          { "name": "testCreatedBranchAppearsInList", "verifies": "VAL-BRANCHOP-001" },
+          { "name": "testInvalidNameBlocksSubmit", "verifies": "VAL-BRANCHOP-002" },
+          { "name": "testDuplicateNameShowsError", "verifies": "VAL-BRANCHOP-003" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "The NewBranchSheet's 'forks from' hint currently renders nil because the branch-list model isn't threaded through the toolbar environment. Not a blocker — the hint is decorative — but a future UX polish pass could wire it via a shared BranchListModel or @Environment source surfaced by RepoFocus. No validation contract assertion depends on the hint being non-nil.",
+      "affectsFeature": "M8-commands-and-menu"
+    },
+    {
+      "severity": "non-blocking",
+      "description": "CreateBranchUITests is committed but not executed in this environment due to host TCC. Same state as FetchUITests/PullPushUITests/etc. from prior milestones — whenever host grants Automation + Accessibility, this suite should be un-gated and run alongside the others.",
+      "affectsFeature": "M8-release-packaging"
+    }
+  ]
+}

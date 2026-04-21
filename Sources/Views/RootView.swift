@@ -44,6 +44,11 @@ struct RootView: View {
             ToolbarItem(placement: .primaryAction) {
                 PushToolbarButton()
             }
+            // VAL-BRANCHOP-001 / VAL-UI-002: New branch sheet trigger. ⌘⇧N
+            // keyboard shortcut is wired in M8-commands-and-menu.
+            ToolbarItem(placement: .primaryAction) {
+                NewBranchButton()
+            }
         }
         .overlay(alignment: .bottom) {
             // VAL-UI-004: toast stack anchored at the bottom of the window,
