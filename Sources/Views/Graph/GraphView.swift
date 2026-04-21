@@ -22,6 +22,7 @@ import SwiftUI
 /// Fulfills: VAL-GRAPH-009, VAL-GRAPH-010, VAL-GRAPH-011.
 struct GraphView: View {
     @Environment(RepoStore.self) private var store
+    @Environment(DiffPaneSelection.self) private var diffSelection
     @State private var model = GraphModel()
 
     var body: some View {
@@ -42,7 +43,10 @@ struct GraphView: View {
             isLoading: model.isLoading,
             lastError: model.lastError,
             selectedSHA: model.selectedSHA,
-            onSelect: { sha in model.select(sha: sha) }
+            onSelect: { sha in
+                model.select(sha: sha)
+                diffSelection.selectedSHA = sha
+            }
         )
         .task(id: focus.repo.id) {
             await model.reload(for: focus)

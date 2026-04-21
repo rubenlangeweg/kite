@@ -11,6 +11,7 @@ struct KiteApp: App {
     @State private var networkOps: NetworkOps
     @State private var autoFetchController: AutoFetchController
     @State private var branchOps: BranchOps
+    @State private var diffPaneSelection: DiffPaneSelection
 
     init() {
         let store = PersistenceStore()
@@ -38,6 +39,7 @@ struct KiteApp: App {
         _networkOps = State(wrappedValue: ops)
         _autoFetchController = State(wrappedValue: AutoFetchController(ops: ops, persistence: store))
         _branchOps = State(wrappedValue: BranchOps(toasts: toasts))
+        _diffPaneSelection = State(wrappedValue: DiffPaneSelection())
     }
 
     private static var isRunningUnderXCTest: Bool {
@@ -56,6 +58,7 @@ struct KiteApp: App {
                 .environment(networkOps)
                 .environment(autoFetchController)
                 .environment(branchOps)
+                .environment(diffPaneSelection)
         }
         .windowResizability(.contentSize)
         .commands {
@@ -72,6 +75,7 @@ struct KiteApp: App {
                 .environment(networkOps)
                 .environment(autoFetchController)
                 .environment(branchOps)
+                .environment(diffPaneSelection)
         }
     }
 

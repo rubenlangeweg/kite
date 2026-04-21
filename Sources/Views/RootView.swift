@@ -19,11 +19,12 @@ struct RootView: View {
             .navigationSplitViewColumnWidth(min: 260, ideal: 360, max: 520)
             .accessibilityIdentifier("kite.content")
         } detail: {
-            // M7-uncommitted-diff: working-copy diff pane. The future
-            // M7-commit-diff feature will introduce a mode toggle switching
-            // between this view and a selected-commit diff; for now the right
-            // column defaults to the uncommitted diff.
-            UncommittedDiffView()
+            // M7-commit-diff: the right column is a router that switches
+            // between the working-copy diff (default) and the selected-commit
+            // diff (when `DiffPaneSelection.selectedSHA != nil`). The graph
+            // row-tap handler writes into `DiffPaneSelection`; the router
+            // observes that value and swaps views.
+            DiffPaneRouter()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("kite.detail")
         }
