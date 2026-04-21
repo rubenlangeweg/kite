@@ -507,7 +507,8 @@
         "VAL-BRANCHOP-003",
         "VAL-BRANCHOP-006"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "93c9747"
     },
     {
       "id": "M6-switch-branch",
@@ -531,7 +532,8 @@
         "VAL-BRANCHOP-005",
         "VAL-BRANCHOP-006"
       ],
-      "status": "pending"
+      "status": "completed",
+      "commit": "10305ec"
     },
     {
       "id": "M7-uncommitted-diff",

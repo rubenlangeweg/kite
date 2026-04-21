@@ -92,3 +92,9 @@
 {"event":"milestone_complete","milestone":"net-ops","testsGreen":232,"commits":5,"timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_start","milestone":"branch-ops","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"feature_start","featureId":"M6-create-branch","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M6-create-branch","status":"completed","commit":"93c9747","testsAdded":17,"totalTestsGreen":214,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M6-switch-branch","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_complete","featureId":"M6-switch-branch","status":"completed","commit":"10305ec","testsAdded":5,"totalTestsGreen":219,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_features_complete","milestone":"branch-ops","featuresCompleted":2,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_scrutiny_deferred","milestone":"branch-ops","reason":"2 small features reusing M5 patterns; checkpoint for context","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"milestone_complete","milestone":"branch-ops","testsGreen":219,"commits":2,"timestamp":"2026-04-19T00:00:00Z"}

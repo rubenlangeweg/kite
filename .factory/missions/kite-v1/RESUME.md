@@ -3,13 +3,14 @@
 Checkpoint — say `resume` to continue.
 
 ## Where we are
-- **4/8 milestones complete** + scrutiny (all PASS-with-non-blocking): M1 foundation · M2 repo-list · M3 branch-list · M4 graph.
-- **195 tests green** (164 Swift Testing + 31 XCTest snapshot, under the skip-list — see `AGENTS.md` for the `-skip-testing:` flags).
-- **24 commits** on `main`.
-- Latest HEAD: `a8560c5 M4-graph-scroll-container`.
-- **Next on resume:** before M5-pull-push, run the tiny `M1-fix-git-error-push-cases` to add `.remoteRejected(String)` / `.hookRejected(String)` / `.protectedBranch(String)` to `GitError`. Then M5 proper (4 features: toast-infrastructure → fetch → pull-push → auto-fetch).
+- **6/8 milestones complete**: M1 foundation · M2 repo-list · M3 branch-list · M4 graph · M5 net-ops · M6 branch-ops.
+- **219 Swift Testing tests + snapshots green** under the skip-list.
+- **~33 commits** on `main`.
+- Latest HEAD: `10305ec M6-switch-branch`.
+- Scrutiny status: M1–M5 all PASS-with-non-blocking; **M6 scrutiny pending** (small milestone — reused M5 patterns, no new architecture).
+- **Next on resume:** M6 scrutiny (quick), then `M1-fix-git-run-drain` (pre-req), then M7 diff (2 features), M7 scrutiny, M8 polish (3 features + fix-snapshot-degeneracy), M8 scrutiny.
 
-## What you can try NOW (M4 is visually huge)
+## What you can try NOW
 
 ```bash
 cd /Users/ruben/Developer/gitruben/kite
@@ -18,40 +19,44 @@ xcodegen generate
 open Kite.xcodeproj   # ⌘R
 ```
 
-Working features:
-- **Sidebar:** repo list + pins + per-root sections + Settings→Roots flow.
-- **Middle column top:** status header (branch + dirty pills + ahead/behind) + branch list (current indicator, ahead/behind, gone pills, detached-HEAD banner).
-- **Middle column bottom:** 🎉 **commit DAG graph** — last 200 commits, column-reuse lane layout with first-parent preference, 6-color palette (`main`/`master`/`trunk`/`default`/`develop` → blue), branch pills with HEAD/+N overflow, relative ages, tap a commit to select it (diff pane lights up in M7). Shallow-clone banner + 200-commit-limit footer work.
-- **Right column:** still placeholder for diff (M7).
-- Auto-refresh on external `git commit` via FSEvents.
+**New since last checkpoint:**
+- **Toolbar: Fetch / Pull / Push / New-branch buttons** with progress indicator. All serialized per repo. No force-push anywhere in source (grep-test proves VAL-SEC-001/002/003).
+- **Toasts**: success (auto-dismiss 5s), error (sticky with click-to-expand full stderr).
+- **Push auto-upstream prompt**: pushing a branch without upstream shows a sheet offering `git push -u`.
+- **Auto-fetch** every 5 minutes on focused repo only (toggle in Settings → General).
+- **Double-click a branch row** to switch. Double-click a remote branch to create a tracking local. Dirty tree → toast "stash or commit in terminal".
+- **⌘+click or toolbar button for New Branch** (keyboard shortcut ⌘⇧N comes in M8).
 
-## Remaining work
+You now have a real GitKraken replacement for daily basic flows.
 
-| Milestone | Features | Notes |
+## Remaining work (9 features left + fixes)
+
+| | Features | Notes |
 |---|---|---|
-| **M5 net-ops** | 4 (+ 1 pre-req) | toast infra → fetch → pull/push (needs `M1-fix-git-error-push-cases`) → auto-fetch. First write ops! |
-| M6 branch-ops | 2 | Create branch (⌘⇧N), double-click to switch. |
-| M7 diff | 2 | Unified diff viewer. **Blocked by `M1-fix-git-run-drain`** (concurrent pipe drain) AND **should consolidate observers into `RepoDetailModel`** first. |
-| M8 polish | 3 + fix-features | App icon, Commands/menu, Release packaging, `M8-fix-snapshot-degeneracy`. |
+| M7 diff | 2 | Uncommitted diff + commit diff. **Blocked by `M1-fix-git-run-drain`** (>64KB outputs would deadlock). |
+| M8 polish | 3 | Commands/menu with keyboard shortcuts, app icon + Info.plist, Release packaging. |
+| fix-features | 3+ | `M1-fix-git-run-drain` (pre-M7), `M1-fix-progress-multi-events` (optional polish), `M8-fix-snapshot-degeneracy` (rebuild broken snapshot suites), optional `RepoDetailModel` consolidation before M7 to keep fan-out ≤ 4. |
 
-## Fix features queued (JIT)
+Per-milestone scrutiny + deferred XCUITest runs (TCC-gated).
 
-- `M1-fix-git-error-push-cases` — **required before M5-pull-push.** Tiny: add 3 `GitError` cases + classifier patterns.
-- `M1-fix-git-run-drain` — required before M7. Refactor `Git.run` to drain pipes concurrently via `readabilityHandler` so >64KB outputs don't deadlock.
-- `M1-fix-progress-consume-all` — optional; smoother M5 fetch progress.
-- `M1-fix-progress-multi-events` — same.
-- `M8-fix-snapshot-degeneracy` — rebuild `RepoSidebarSnapshotTests` and `SettingsRootsTabSnapshotTests` with proper `NSHostingController.view.appearance = .darkAqua` + `.background(Color(nsColor: .windowBackgroundColor))` so light/dark references differ and stay stable across re-records. Currently on the `-skip-testing:` list.
-- `M7-preq-repo-detail-model` — consolidate `BranchListModel` / `StatusHeaderModel` / `GraphModel` FSWatcher reloads into one `RepoDetailModel` with prior-Task cancellation. Fan-out is already at 3; M7 adds 2 more.
+## Fix features queued
+
+- `M1-fix-git-run-drain` — refactor `Git.run` to drain both pipes concurrently via `readabilityHandler`. Required before M7 (git show/diff routinely >64KB).
+- `M1-fix-progress-multi-events` — optional; smoother progress from ProgressParser (return array per chunk instead of last-only).
+- `M8-fix-snapshot-degeneracy` — rebuild `RepoSidebarSnapshotTests` + `SettingsRootsTabSnapshotTests` with proper `.darkAqua` + `.background` discipline. Currently on the `-skip-testing:` list.
+- `M7-preq-repo-detail-model` — optional; consolidate the now-4-or-5-per-focus observers into one `RepoDetailModel` before M7 ships another 2.
 
 ## Patterns established (AGENTS.md + SKILL.md)
 
 - App-level `@State` on `@main App` → `.environment(...)` → `@Environment(Type.self)`.
-- Actor-reentrancy remedy: `GitQueue.CompletionGate` chain serializes across suspensions.
-- **Stateful outer + pure Content inner** view split (exemplar: `StatusHeaderView`, now `GraphView`).
-- Monotonic-tick auto-dismiss for transient UI states.
+- `GitQueue.CompletionGate` serialization across `await` suspensions.
+- Stateful outer + pure inner view split (e.g. `StatusHeaderView` + `StatusHeaderContent`).
+- Monotonic-tick auto-dismiss (Toasts, Inline errors).
+- `@Bindable var model` + `$model.selection` for `List(selection:)`.
 - XCTest-gated fixture launch args.
-- Snapshot md5-distinct discipline; force `.darkAqua` via `NSHostingController.view.appearance`.
-- Subprocess discipline: minimize per refresh; `async let` / `TaskGroup` fan-out **inside** one `queue.run`.
-- Observer fan-out limit: consolidate into `RepoDetailModel` before M7.
+- Snapshot md5-distinct; force `.darkAqua` via `NSHostingController.view.appearance`.
+- Subprocess fan-out: concurrent `async let` inside ONE `queue.run`.
+- `NetworkOps.runStreaming(on:args:progressLabel:)` shared template for fetch/pull/push.
+- FSEvents-driven observer refresh on `git` writes (no manual callbacks).
 
-Resume pointer: start with `M1-fix-git-error-push-cases`, then `M5-toast-infrastructure`.
+Resume pointer: orchestrator should run `scrutiny-validator-branch-ops` (quick), then `M1-fix-git-run-drain`, then `M7-uncommitted-diff`.
