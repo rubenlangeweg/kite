@@ -98,3 +98,7 @@
 {"event":"milestone_features_complete","milestone":"branch-ops","featuresCompleted":2,"timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_scrutiny_deferred","milestone":"branch-ops","reason":"2 small features reusing M5 patterns; checkpoint for context","timestamp":"2026-04-19T00:00:00Z"}
 {"event":"milestone_complete","milestone":"branch-ops","testsGreen":219,"commits":2,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"scrutiny_start","milestone":"branch-ops","round":1,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"scrutiny_complete","milestone":"branch-ops","round":1,"status":"pass-with-non-blocking-issues","blockingIssues":0,"nonBlockingIssues":7,"timestamp":"2026-04-19T00:00:00Z"}
+{"event":"shared_state_update","file":"INTERFACES.md","description":"Tightened observer fan-out rule: RepoDetailModel consolidation is a hard pre-req for M7 (5 observers incoming)","timestamp":"2026-04-19T00:00:00Z"}
+{"event":"feature_start","featureId":"M1-fix-git-run-drain","timestamp":"2026-04-19T00:00:00Z"}

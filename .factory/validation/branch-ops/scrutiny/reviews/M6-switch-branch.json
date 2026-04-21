@@ -1,0 +1,77 @@
+{
+  "milestoneId": "M6-branch-ops",
+  "featureId": "M6-switch-branch",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Diff expands Sources/ViewModels/BranchOps.swift with switchToLocal + switchToRemote(existingLocal:) delegation, wires double-click gesture through Sources/Views/Detail/BranchRow.swift (onDoubleClick closure, .simultaneousGesture(TapGesture(count: 2))), and adds the driving logic in Sources/Views/Detail/BranchListView.swift (handleLocalDoubleClick, handleRemoteDoubleClick with stripRemotePrefix + upstream match). Tests: BranchOpsSwitchTests with 5 real-git fixture cases (LocalFixture + bare-upstream RemoteFixture) covering switchToLocalSuccess, switchToLocalDirtyTreeBlocks (documented copy verified), switchToLocalNonExistentBranch, switchToRemoteCreatesTrackingLocal (`git switch -c feature-x --track origin/feature-x`, upstream verified via for-each-ref), switchToRemoteReusesExistingLocal (local branch count unchanged across re-double-click). SwitchBranchUITests with 4 authored XCUI cases (unrun per host TCC). The delegation path in switchToRemote(existingLocal:) correctly routes to switchToLocal when a local branch already tracks the remote — avoids the 'already exists' fail mode cleanly. Current-branch double-click is a genuine no-op (early return in handleLocalDoubleClick on `branch.isHead`) — no Process is spawned for a redundant switch.",
+    "checksPerformed": {
+      "doubleClickCoexistence": ".simultaneousGesture(TapGesture(count: 2)) on BranchRow does NOT steal List's single-click row selection — both gestures fire independently, confirmed by the gesture semantics (simultaneous vs. exclusive).",
+      "currentBranchNoOp": "handleLocalDoubleClick returns early when `branch.isHead` — Process NEVER fires on a no-op. Verified: the function early-returns before the `Task { await ops.switchToLocal(...) }` dispatch. Unit-wise the SwitchBranchUITests XCUI case testDoubleClickCurrentBranchNoOp asserts this; at unit level no specific test exists but the control flow is trivially correct.",
+      "remotePrefixStripping": "stripRemotePrefix correctly strips the `<remote>/` prefix from the refname:short (`origin/feature-x` → `feature-x`). Defensive fallback returns input unchanged if prefix absent. Upstream match computes `<remote>/<shortBranchName>` and probes `model.local.first { $0.upstream == upstreamRef }`, passing `.shortName` as `existingLocal` when matched.",
+      "existingLocalReuse": "switchToRemote(existingLocal:) delegates to switchToLocal when non-nil. BranchOpsSwitchTests.switchToRemoteReusesExistingLocal verifies branch count stays constant across re-click (no spurious `git switch -c` causing 'fatal: A branch named already exists').",
+      "queueSerialization": "Both switchToLocal and switchToRemote route through the shared runSwitch helper, which wraps Git.run in `focus.queue.run { @Sendable in ... }`. Consistent with M5 pattern.",
+      "dirtyTreeCopy": "BranchOps.dirtyTreeMessage is the single static source of truth; both BranchOpsCreateTests.dirtyTreeBlocksSwitch (via shared runSwitch) and BranchOpsSwitchTests.switchToLocalDirtyTreeBlocks assert equality against it. HEAD verified unchanged after failure (no mid-switch abandonment).",
+      "accessibilityIdentifierSplit": "Remote rows now use `BranchRow.Remote.<shortName>` — BranchListUITests references only `BranchRow.main` / `BranchRow.feature/a` (local-only), no regression. SwitchBranchUITests uses both forms correctly."
+    },
+    "issues": [
+      {
+        "file": "Sources/Views/Detail/BranchListView.swift",
+        "line": 134,
+        "severity": "non-blocking",
+        "description": "handleLocalDoubleClick guards on `branch.isHead` to suppress the no-op, which is correct — but an untested assertion. Adding a unit test (e.g. a @MainActor test that synthesizes a Branch with isHead=true and asserts no ToastCenter activity after a hypothetical double-click) would close the 'no Process on no-op' contract at unit level rather than relying on the XCUI coverage that isn't running. Small, non-blocking."
+      },
+      {
+        "file": "Sources/Views/Detail/BranchRow.swift",
+        "line": 62,
+        "severity": "non-blocking",
+        "description": "`.simultaneousGesture` fires the double-click handler on every pair of rapid taps regardless of row selection state — which is desired — but it ALSO fires when the user double-clicks the DisclosureGroup chevron or the pill area. Not likely to matter (double-click on chevron still collapses/expands; pill area is small), but worth noting if a user ever files a 'double-clicked in-sync pill, branch switched' bug. Consider limiting the gesture's hit test via `.contentShape` to exclude the pills trailing region."
+      },
+      {
+        "file": "Tests/KiteTests/ViewModelTests/BranchOpsSwitchTests.swift",
+        "line": 287,
+        "severity": "non-blocking",
+        "description": "switchToRemoteReusesExistingLocal's assertion chain checks local branch count unchanged across the reuse call. Passes here, but a stronger assertion would also check that `toasts.toasts` contains exactly 2 success toasts (one from the prime call, one from the reuse) AND that the second toast's message starts with 'Switched to feature-x' rather than 'tracking' (proving the delegation path, not the -c path, fired). Belt-and-braces only; current assertion is sufficient."
+      },
+      {
+        "file": "Sources/ViewModels/BranchOps.swift",
+        "line": 122,
+        "severity": "non-blocking",
+        "description": "switchToRemote's tracking-ref construction hardcodes `<remote>/<branch>` without escaping — fine because BranchNameValidator won't run here (remote names come from git, not user input), but worth a one-line comment documenting that this path is FIXED-reference-only (caller supplies git-parsed strings, not user input) in case a future UI thread user-editable remote names through. Otherwise VAL-SEC-007's guarantee is implicit here."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "observer fan-out",
+      "observation": "M6-switch-branch did NOT add a new focus.lastChangeAt observer — `git switch` writes .git/HEAD → FSWatcher fires → BranchListView's existing observer reloads and the current-indicator moves. Counter unchanged at 3 (BranchList + StatusHeader + Graph). Consolidation pressure from the INTERFACES.md §4 note still applies ahead of M7 (which will add 2 → 5).",
+      "evidence": "grep 'onChange(of: focus.lastChangeAt)' Sources yields 3 files only: BranchListView, StatusHeaderView, GraphView."
+    },
+    {
+      "area": "file ownership crossover",
+      "observation": "M6-switch-branch touched Sources/Views/Detail/BranchRow.swift and BranchListView.swift — both originally authored by M3-branch-list (1f90eb2). Both files fall under `Sources/Views/**` which maps to swiftui-worker per INTERFACES.md §3 — same archetype, NOT a cross-archetype crossover. The changes are additive (gesture + optional callback + accessibility identifier shape) and preserve the public surface. Acceptable.",
+      "evidence": "INTERFACES.md §3 ownership table: `Sources/Views/**` → swiftui-worker. Handoff documents the additive nature; BranchRow diff preserves every prior assertion in BranchListSnapshotTests."
+    },
+    {
+      "area": "gesture + List compatibility",
+      "observation": "`.simultaneousGesture` semantics coexist with List's single-click row selection. The chosen pattern (TapGesture(count: 2) as simultaneous) is the canonical SwiftUI macOS way to add double-click-to-act on a List row without breaking single-click-to-select.",
+      "evidence": "Sources/Views/Detail/BranchRow.swift line 62; confirmed against Apple sample code for NavigationSplitView detail lists."
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-BRANCHOP-004",
+      "VAL-BRANCHOP-005",
+      "VAL-BRANCHOP-006"
+    ],
+    "unverified": [
+      {
+        "assertion": "VAL-BRANCHOP-004 (no-Process-on-current-branch-double-click)",
+        "note": "Covered at control-flow level (handleLocalDoubleClick early-returns on isHead) and by the authored SwitchBranchUITests.testDoubleClickCurrentBranchNoOp which is unrun on this host. No unit test exists that directly asserts 'no toast produced / no git invoked' for a current-branch double-click."
+      },
+      {
+        "assertion": "VAL-BRANCHOP-005 XCUI coverage",
+        "note": "testDoubleClickRemoteBranchCreatesTrackingLocal authored but unrun per TCC blocker. Unit-level coverage via switchToRemoteCreatesTrackingLocal + switchToRemoteReusesExistingLocal is comprehensive against real fixtures."
+      }
+    ]
+  }
+}

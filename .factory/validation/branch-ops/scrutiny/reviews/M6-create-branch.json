@@ -1,0 +1,76 @@
+{
+  "milestoneId": "M6-branch-ops",
+  "featureId": "M6-create-branch",
+  "status": "pass-with-non-blocking-issues",
+  "codeReview": {
+    "summary": "Diff adds Sources/Git/BranchNameValidator.swift (pure enum, 13 error cases), Sources/ViewModels/BranchOps.swift (@Observable @MainActor, validate-first then focus.queue.run runSwitch helper), Sources/Views/BranchOps/NewBranchSheet.swift (presentational, inline validation, .cancelAction / .defaultAction, @FocusState), Sources/Views/Toolbar/NewBranchButton.swift (toolbar surface), plus wiring in KiteApp.swift (both WindowGroup and Settings scenes) and RootView.swift (toolbar after PushToolbarButton). Tests: BranchNameValidatorTests (27 effective cases — valid set, 21-row invalid table, 4 control-char cases, 8 shell-shape cases, description-coverage), BranchOpsCreateTests (5 real-fixture cases covering success, invalid-pre-Process, duplicate, dirty-tree via shared runSwitch, shell-injection sentinel), NewBranchSheetSnapshotTests (4 md5-distinct refs via NSHostingController appearance forcing), CreateBranchUITests (4 authored XCUI cases, unrun per host TCC). Pattern quality is very high — BranchOps.runSwitch is a clean shared helper, validator is pure and complexity-split into 4 helpers (no SwiftLint suppression bypass), every classified GitError lands at the right toast copy, and the Process-argv safety invariant is reinforced by the sentinel test that proves a malicious name can't trigger a filesystem side-effect.",
+    "checksPerformed": {
+      "validatorExhaustive": "All 13 git ref-format rules covered: empty, control-chars (0x00-0x1f + 0x7f — verified by rejectsTab/Newline/Nul/Del), leading dash, space, disallowed chars (~ ^ : ? * [ \\\\), dot-dot, @{, trailing dot, trailing slash, .lock suffix, /., //, reserved (HEAD, FETCH_HEAD, ORIG_HEAD, MERGE_HEAD — all four present).",
+      "purity": "BranchNameValidator is a plain `enum` with no stored state, no imports beyond Foundation, only static methods returning Optional<ValidationError>. No I/O. No side effects.",
+      "complexity": "validate() split into structuralError / characterError / sequenceError / endingError to stay under SwiftLint's cyclomatic_complexity threshold WITHOUT disable suppressions — swiftlint --strict returns 0 violations across 128 files.",
+      "validateFirst": "BranchOps.createBranch runs BranchNameValidator.validate BEFORE reaching runSwitch / Process. Rejection path posts an 'Invalid branch name:' toast and returns false. Verified by `processArgsNoShellInjection` test: sentinel file under /tmp/kite-branchops-pwn-<uuid> is NOT created.",
+      "queueSerialization": "All git calls run inside `focus.queue.run { @Sendable in ... }` — serialised against the focused repo's GitQueue per VAL-NET-009 pattern. No raw Git.run outside the queue.",
+      "errorClassification": "runSwitch uses `throwIfFailed(classifier: ErrorClassifier.classify)` — same pattern as M5 NetworkOps. Dirty-tree errors route to `BranchOps.dirtyTreeMessage` static constant ('Uncommitted changes — stash or commit in terminal before switching.'). processFailed falls through to firstLine-of-stderr for duplicate-branch etc.",
+      "sheetUX": "NewBranchSheet: .keyboardShortcut(.cancelAction) on Cancel, .keyboardShortcut(.defaultAction) on Create. .onAppear sets nameFieldFocused = true. Inline error only shown when `name.isEmpty == false` (via `if let err = validationError, !name.isEmpty`). Create disabled when name empty OR validator non-nil OR isSubmitting. onSubmit (Enter in TextField) calls submit(). Cancel returns without running git (onCancel just sets showSheet = false)."
+    },
+    "issues": [
+      {
+        "file": "Sources/Views/Toolbar/NewBranchButton.swift",
+        "line": 53,
+        "severity": "non-blocking",
+        "description": "currentBranchName always returns nil by design, so NewBranchSheet's 'forks from \"<current>\"' decorative line never renders. Handoff acknowledges this as a future UX polish. Not a blocker — no validation assertion depends on the hint — but wire it via a shared BranchListModel or RepoFocus-surfaced currentBranch value in a future feature."
+      },
+      {
+        "file": "Sources/Views/BranchOps/NewBranchSheet.swift",
+        "line": 95,
+        "severity": "non-blocking",
+        "description": "`isSubmitting` latches true for the sheet's remaining life on first submit; on a failing createBranch the sheet stays open with a disabled Create button, forcing the user to cancel + reopen. Comment documents this as intentional (parent 'can re-present the sheet with a fresh state instance') but today the parent NewBranchButton.onCreate dismisses unconditionally. So in practice a create failure always dismisses, which matches behavior, but the latched state is dead code if the dismissal contract holds. Consider either removing the latch or actually re-presenting on failure in a future UX pass."
+      },
+      {
+        "file": "Sources/ViewModels/BranchOps.swift",
+        "line": 151,
+        "severity": "non-blocking",
+        "description": "`catch let gitError as GitError { ... }` unwraps via messageFor, but the `default` branch casts `error as LocalizedError` — GitError IS LocalizedError, so this never triggers and the fallback string is dead. Consider: either switch exhaustively over GitError cases, or drop the default and rely on the non-GitError branch below."
+      },
+      {
+        "file": "Tests/KiteTests/ViewTests/NewBranchSheetSnapshotTests.swift",
+        "line": 141,
+        "severity": "non-blocking",
+        "description": "`NewBranchSheetPreviewBody` mirrors production `NewBranchSheet.body` for deterministic snapshotting. Acceptable — Established pattern per AGENTS.md recommends outer+inner split — but the mirror can silently drift from the real body (no compile-time guarantee they match). Consider extracting a pure `NewBranchSheetContent` struct in production that both the live sheet and the snapshot test can render, eliminating the mirror."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "observer fan-out",
+      "observation": "M6-create-branch did NOT add a new focus.lastChangeAt observer — the created branch appears via FSEvents tick → BranchListView's existing observer reloads. Follows the M5 pattern ('leverage existing observers rather than threading callbacks'). Observer count unchanged at 3 (BranchList + StatusHeader + Graph).",
+      "evidence": "Sources/Views/Detail/BranchListView.swift line 66; no new onChange(lastChangeAt) elsewhere in this feature."
+    },
+    {
+      "area": "environment injection discipline",
+      "observation": "BranchOps is injected on BOTH the WindowGroup RootView AND the Settings scene in KiteApp.swift (lines 58 and 74). Matches the M5 ToastCenter / ProgressCenter / NetworkOps / AutoFetchController pattern and the guidance note added by net-ops scrutiny.",
+      "evidence": "Sources/App/KiteApp.swift lines 58, 74."
+    },
+    {
+      "area": "security invariants",
+      "observation": "ErrorClassifier.swift unchanged since M5 (carry-over auth-before-notAGitRepository reorder is still queued for M8). SecurityInvariantsTests.swift unchanged. Grep for --force / reset --hard / push -f / git clean over Sources yields 0 matches; validator + Process-argv sentinel test together close VAL-SEC-007.",
+      "evidence": "git diff f8cc8ae..HEAD shows no changes to Sources/Git/ErrorClassifier.swift or Tests/KiteTests/SecurityInvariantsTests.swift."
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilled": [
+      "VAL-BRANCHOP-001",
+      "VAL-BRANCHOP-002",
+      "VAL-BRANCHOP-003",
+      "VAL-BRANCHOP-006",
+      "VAL-SEC-007",
+      "VAL-UI-010"
+    ],
+    "unverified": [
+      {
+        "assertion": "VAL-BRANCHOP-001 XCUI coverage",
+        "note": "CreateBranchUITests authored with 4 cases but not run on this host (TCC blocker — same pattern as prior milestones' XCUI suites). Unit coverage against real GitFixtureHelper repos is comprehensive."
+      }
+    ]
+  }
+}

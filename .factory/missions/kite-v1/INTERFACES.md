@@ -87,7 +87,7 @@ The orchestrator re-plans either a collaboration or a routing change.
 
 - Workers **read** `AGENTS.md` before starting any feature.
 - Workers do not modify `INTERFACES.md`, `AGENTS.md`, `mission.md`, `features.json`, or `validation-contract.md`. Only the orchestrator does.
-- **Per-focus observer fan-out discipline.** Each model observing `focus.lastChangeAt` spawns its own `Task` on every FS tick. Today (M3) that's 2 (branch list + status header); M4 adds graph, M7 adds diff. Before adding a 4th observer, consolidate into a shared `RepoDetailModel` that reloads all panels from a single entry point. Cancel the previous reload Task before spawning a new one to avoid unbounded concurrency.
+- **Per-focus observer fan-out discipline.** Each model observing `focus.lastChangeAt` spawns its own `Task` on every FS tick. Count at M6: 3 (branch list + status header + graph). M7 adds 2 (uncommitted diff + commit diff) = 5. **Consolidate into a shared `RepoDetailModel` BEFORE M7 ships** — single reload entry point, cancel-prior-task discipline built in. Not a soft recommendation: at 5 unbounded Tasks per FS tick, rapid commits produce runaway concurrency that the per-repo `GitQueue` can't fully contain.
 - **`FSWatcher` is one-shot.** Call `start()` once, `stop()` once. Do not attempt to start a stopped watcher — it is a silent no-op. When switching focused repos (M3-repo-focus-lifecycle), create a **fresh** `FSWatcher` instance rather than restarting the existing one.
 - Workers read `library/*.md` freely for reference.
 - New reference-worthy findings go to `library/` with an orchestrator PR.

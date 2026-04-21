@@ -1,0 +1,174 @@
+{
+  "milestone": "branch-ops",
+  "round": 1,
+  "status": "pass-with-non-blocking-issues",
+  "validatorsRun": {
+    "xcodegen": {
+      "exitCode": 0,
+      "observation": "xcodegen generate regenerated Kite.xcodeproj cleanly (new Sources/Git/BranchNameValidator.swift, Sources/ViewModels/BranchOps.swift, Sources/Views/BranchOps/NewBranchSheet.swift, Sources/Views/Toolbar/NewBranchButton.swift, and test files picked up)."
+    },
+    "build": {
+      "exitCode": 0,
+      "observation": "xcodebuild -scheme Kite -configuration Debug build: ** BUILD SUCCEEDED ** with no new warnings on Xcode 26.4.1 / SDK macOS 26.4."
+    },
+    "test": {
+      "exitCode": 0,
+      "observation": "xcodebuild test -only-testing:KiteTests with the skip list: 219 tests in 33 suites passed after 105.8s. Delta from M5 baseline 201: +13 create-branch visible cases (27 validator effective cases reported as ~4 parameterized entries + 5 BranchOpsCreate + 4 NewBranchSheet snapshot) +5 BranchOpsSwitch = +18 visible. KiteUITests NOT run (TCC blocker; SwitchBranchUITests.swift + CreateBranchUITests.swift authored but deferred to user-testing on a TCC-unblocked host)."
+    },
+    "swiftformat": {
+      "exitCode": 0,
+      "observation": "swiftformat Sources Tests --lint: 0/128 files require formatting."
+    },
+    "swiftlint": {
+      "exitCode": 0,
+      "observation": "swiftlint --strict: 0 violations, 0 serious in 128 files. No `// swiftlint:disable` suppressions added in the milestone diff to bypass cyclomatic_complexity (confirmed: validate() was decomposed instead)."
+    },
+    "securityGrep": {
+      "exitCode": 0,
+      "observation": "grep -rn '--force\\|reset --hard\\|git clean\\|push -f\\|--force-with-lease' Sources/: no matches. VAL-SEC-001/002/003 re-verified. Git invocations use `git switch` (never `checkout --force`), `git switch -c` for create, `git switch -c <name> --track <remote>/<name>` for remote-track create — all safe, all argv-only."
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 0,
+    "passedWithNonBlocking": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "M6-create-branch",
+      "file": "Sources/Views/Toolbar/NewBranchButton.swift",
+      "line": 53,
+      "description": "currentBranchName hardcoded to nil — NewBranchSheet's decorative 'forks from <current>' line never renders. Not a contract violation (no VAL-* depends on this). Future UX polish: surface current branch via a shared BranchListModel or RepoFocus-level currentBranch value."
+    },
+    {
+      "featureId": "M6-create-branch",
+      "file": "Sources/ViewModels/BranchOps.swift",
+      "line": 151,
+      "description": "runSwitch's GitError-cast catch block has a `default` branch that forces `error as LocalizedError` — GitError IS LocalizedError so the fallback string path is dead code. Consider switching exhaustively over GitError cases, or drop the default."
+    },
+    {
+      "featureId": "M6-create-branch",
+      "file": "Sources/Views/BranchOps/NewBranchSheet.swift",
+      "line": 95,
+      "description": "isSubmitting latches for the sheet's life, relying on the parent NewBranchButton to dismiss on outcome. Parent DOES dismiss unconditionally (line 40 of NewBranchButton.swift), so the latched retry-prevention is effectively dead. Either drop the latch, or actually re-present the sheet on failure for better UX when a validator-allowed but git-rejected name hits (e.g. duplicate)."
+    },
+    {
+      "featureId": "M6-create-branch",
+      "file": "Tests/KiteTests/ViewTests/NewBranchSheetSnapshotTests.swift",
+      "line": 141,
+      "description": "NewBranchSheetPreviewBody mirrors the production body for deterministic snapshots. Established pattern per AGENTS.md but subject to silent drift. Consider factoring a pure `NewBranchSheetContent` subview in production that both the live sheet and the snapshot test render — eliminates the mirror + compile-time keeps them in sync."
+    },
+    {
+      "featureId": "M6-switch-branch",
+      "file": "Sources/Views/Detail/BranchListView.swift",
+      "line": 134,
+      "description": "The 'double-click current branch is no-op' invariant is enforced by a single-line `if branch.isHead { return }` but has no unit-level assertion. Reliance on the unrun XCUI case means the invariant is not continuously verified. Add a @MainActor unit test that synthesizes an isHead=true Branch and asserts no toast and no Git.run side-effect after a double-click dispatch."
+    },
+    {
+      "featureId": "M6-switch-branch",
+      "file": "Sources/Views/Detail/BranchRow.swift",
+      "line": 62,
+      "description": ".simultaneousGesture(TapGesture(count: 2)) hit-tests the whole row including pills + chevron. A pill-area double-click will fire switchToLocal. Unlikely UX bug but tighten via a narrower `.contentShape` or guard at the gesture site in future polish."
+    },
+    {
+      "featureId": "M6-switch-branch",
+      "file": "Sources/ViewModels/BranchOps.swift",
+      "line": 122,
+      "description": "switchToRemote constructs `<remote>/<branch>` without escaping. Safe because caller (BranchListView) supplies git-parsed strings, not user input — but a one-line comment would lock in the contract for future callers (e.g. if a future 'Switch to manually typed remote ref' UI surfaces)."
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "file": "AGENTS.md",
+      "change": "Under 'Established patterns', append: 'BranchOps pattern — for any ViewModel running a user-triggered git write op (create, switch, push, pull): (1) validate user input BEFORE reaching Process; (2) wrap the Git.run in focus.queue.run { @Sendable in } so per-repo serialization holds; (3) catch GitError, route dirtyWorkingTree → documented static copy, processFailed → firstLine(stderr) toast; (4) never pass flags that match the VAL-SEC-001/002/003 grep denylist. BranchOps.runSwitch is the canonical implementation.'",
+      "rationale": "M6 established a tight create/switch template that M7-diff-ops (if it has write ops) and any future ops will want to copy. Codify before M7 so the pattern isn't re-invented."
+    },
+    {
+      "file": "AGENTS.md",
+      "change": "Under 'Known gotchas → SwiftUI / macOS', append: '7. Double-click on List rows requires `.simultaneousGesture(TapGesture(count: 2))` — an `.onTapGesture(count: 2)` steals single-click row selection. The simultaneous variant coexists with List's built-in selection. M6-switch-branch's BranchRow is the reference. If the gesture triggers on unwanted sub-regions (pills, chevron), narrow the `.contentShape` rect.'",
+      "rationale": "Non-obvious SwiftUI macOS detail; easy for M7/M8 authors to get wrong without guidance."
+    },
+    {
+      "file": "skills/swiftui-worker/SKILL.md",
+      "change": "Add 'Validator + ViewModel cross-file discipline: when a feature introduces a pure validator AND a ViewModel that uses it, the ViewModel MUST validate BEFORE invoking any subprocess. Tests MUST include both a unit-level validator test (table-driven, exhaustive) AND an integration test that feeds a malicious input through the ViewModel and asserts no filesystem side-effect. BranchOps.processArgsNoShellInjection with its /tmp/kite-branchops-pwn-<uuid> sentinel is the template.'",
+      "rationale": "The sentinel-file test pattern is stronger than asserting `ok == false` alone — it forensically proves no Process escaped. Should become the standard for any new user-input-fed git op."
+    },
+    {
+      "file": "INTERFACES.md",
+      "change": "§4 Shared state rules → Per-focus observer fan-out: update the counter. M6 did NOT add a 4th observer — create + switch both use FSEvents-driven reloads via the existing BranchListView observer, per the M5 precedent. Observer count remains 3 (BranchList + StatusHeader + Graph). M7 is the milestone that pushes to 5 (uncommitted diff + commit diff). The RepoDetailModel consolidation refactor MUST happen before M7 lands, not during it.",
+      "rationale": "Keeps the counter accurate and reinforces the pre-M7 refactor urgency."
+    }
+  ],
+  "validationContractCoverage": {
+    "fulfilledThisMilestone": [
+      "VAL-BRANCHOP-001",
+      "VAL-BRANCHOP-002",
+      "VAL-BRANCHOP-003",
+      "VAL-BRANCHOP-004",
+      "VAL-BRANCHOP-005",
+      "VAL-BRANCHOP-006",
+      "VAL-SEC-007"
+    ],
+    "anyOrphansOrFailures": [
+      {
+        "assertion": "VAL-BRANCHOP-001 / VAL-BRANCHOP-003 / VAL-BRANCHOP-004 / VAL-BRANCHOP-005 XCUI coverage",
+        "status": "architecturally-covered, XCUI deferred",
+        "note": "CreateBranchUITests (4 cases) + SwitchBranchUITests (4 cases) are authored and committed but unrun on this host due to TCC Automation/Accessibility blocker. Unit-level coverage against real GitFixtureHelper repos (both local and bare-upstream+clone) is comprehensive. Defer XCUI execution to user-testing-validator-branch-ops on a TCC-unblocked host."
+      },
+      {
+        "assertion": "VAL-BRANCHOP-004 no-Process-on-current-branch",
+        "status": "control-flow correct, no unit assertion",
+        "note": "handleLocalDoubleClick's `if branch.isHead { return }` is trivially correct but not unit-tested. XCUI case testDoubleClickCurrentBranchNoOp covers it but is unrun. Add unit assertion as M8 polish."
+      }
+    ]
+  },
+  "carryOverObservations": [
+    {
+      "area": "net-ops carry-overs",
+      "status": "unchanged",
+      "note": "M1-fix-git-error-push-cases (auth before notAGitRepository ordering in ErrorClassifier) — M6 did NOT touch ErrorClassifier.swift. Still queued for M8. M5-pull-push SecurityInvariantsTests gap (short-form `-f`, `-D`) — M6 did NOT touch that test. Still queued. AutoFetchController multi-window scope — still unchanged. M5-toast ProgressCenter first-wins — unchanged."
+    },
+    {
+      "area": "graph milestone carry-overs",
+      "status": "partially-mitigated",
+      "note": "M1-fix-git-run-drain (Git.run pipe-buffer concurrent drain) remains deferred — M6 consistently used Git.run for small-output `git switch` commands (well under 64KB), so no pressure added. Pressure remains on M7-commit-diff where `git show <sha>` and `git diff` will blow past 64KB routinely. RepoDetailModel consolidation unchanged — still at 3 observers. This must land before M7."
+    },
+    {
+      "area": "repo-list / foundation carry-overs",
+      "status": "unchanged",
+      "note": "SettingsRootsTab + RepoSidebar degenerate snapshots still skip-listed. GitQueue @unchecked Sendable CompletionGate still missing justification doc-comment. PersistenceStore silent swallows unchanged."
+    },
+    {
+      "area": "ownership crossover",
+      "status": "acceptable",
+      "note": "M6-switch-branch touched Sources/Views/Detail/BranchRow.swift + BranchListView.swift which were authored by M3-branch-list. Both fall under swiftui-worker's Sources/Views/** territory — same archetype, NOT a cross-archetype collision. Changes are strictly additive (gesture callback + accessibility identifier split). Prior BranchListSnapshotTests still green."
+    },
+    {
+      "area": "new concerns introduced this milestone",
+      "status": "non-blocking",
+      "note": "(1) currentBranchName hardcoded to nil in NewBranchButton — decorative hint never renders. (2) runSwitch default branch catch is dead code. (3) isSubmitting latch in NewBranchSheet is effectively dead given the parent dismissal contract. (4) NewBranchSheetPreviewBody snapshot mirror can silently drift from production body. (5) Double-click gesture hit-tests the whole row including pills. All non-blocking; queue for M8 polish."
+    }
+  ],
+  "deferredUserTestingFollowUps": [
+    "Run Tests/KiteUITests/CreateBranchUITests.swift (4 cases) + SwitchBranchUITests.swift (4 cases) alongside prior milestone XCUI suites on a TCC-unblocked host.",
+    "VAL-BRANCHOP-004 manual walkthrough: double-click currently-checked-out branch in BranchListView and confirm no Process spawns (e.g. `pgrep -P <kite-pid>` shows no git child).",
+    "VAL-BRANCHOP-005 end-to-end: in a repo with `origin/feature-x` and no local `feature-x`, double-click the remote row — verify local `feature-x` is created with `origin/feature-x` upstream and HEAD moves. Then double-click the remote row AGAIN and verify no duplicate local branch is created.",
+    "VAL-BRANCHOP-006 manual: modify a tracked file without committing, try to switch branches via double-click — verify the documented dirty-tree toast surfaces and HEAD does not move."
+  ],
+  "pretraversalM7Guidance": {
+    "blocksM7": false,
+    "requiredBeforeM7": [
+      "M1-fix-git-run-drain (Git.run pipe-buffer concurrent drain) — M7-commit-diff will exceed 64KB consistently on any non-trivial `git diff` or `git show`. This was flagged before M4; it is now the single sharpest pre-M7 blocker. Orchestrator MUST schedule this feature before any M7 diff-pane work."
+    ],
+    "strongRecommendBeforeM7": [
+      "RepoDetailModel consolidation per INTERFACES.md §4 — at 3 observers today; M7 adds 2 (uncommitted diff + commit diff) pushing to 5. Every extra day compounds the refactor cost. Best to consolidate between M6 and M7.",
+      "ErrorClassifier pattern re-order — move notAGitRepository above auth so missing-remote-dir fetch classifies correctly (M5 carry-over).",
+      "SecurityInvariantsTests expansion — add short-form `-f`, `-D`, and other shortened force-argument invariants (M5 carry-over).",
+      "Codify the BranchOps / runSwitch pattern in AGENTS.md before M7 so any new write op (if M7 introduces any) follows the validated template rather than re-inventing."
+    ]
+  },
+  "previousRound": null
+}
