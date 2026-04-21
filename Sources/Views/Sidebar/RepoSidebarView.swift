@@ -45,12 +45,13 @@ struct RepoSidebarView: View {
     }
 
     private var repoList: some View {
-        List(selection: selectionBinding) {
+        @Bindable var model = model
+        return List(selection: $model.selection) {
             if !model.pinned.isEmpty {
                 Section {
                     ForEach(model.pinned) { repo in
                         RepoRow(repo: repo)
-                            .tag(repo as DiscoveredRepo?)
+                            .tag(repo)
                             .contextMenu {
                                 contextMenuItems(for: repo, isPinned: true)
                             }
@@ -65,7 +66,7 @@ struct RepoSidebarView: View {
                 Section {
                     ForEach(section.repos) { repo in
                         RepoRow(repo: repo)
-                            .tag(repo as DiscoveredRepo?)
+                            .tag(repo)
                             .contextMenu {
                                 contextMenuItems(for: repo, isPinned: isPinned(repo))
                             }
@@ -79,13 +80,6 @@ struct RepoSidebarView: View {
         }
         .listStyle(.sidebar)
         .accessibilityIdentifier("RepoSidebar.List")
-    }
-
-    private var selectionBinding: Binding<DiscoveredRepo?> {
-        Binding(
-            get: { model.selectedRepo },
-            set: { model.select($0) }
-        )
     }
 
     @ViewBuilder

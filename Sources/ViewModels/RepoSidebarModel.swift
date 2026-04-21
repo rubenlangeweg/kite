@@ -43,6 +43,14 @@ final class RepoSidebarModel {
     /// or just after boot).
     private(set) var selectedRepo: DiscoveredRepo?
 
+    /// Bindable selection property for SwiftUI `List(selection:)`.
+    /// The getter returns `selectedRepo`; the setter routes through
+    /// `select(_:)` so persistence + RepoStore side-effects fire.
+    var selection: DiscoveredRepo? {
+        get { selectedRepo }
+        set { select(newValue) }
+    }
+
     /// True while `refresh()` is running. Lets views render a subtle
     /// "scanning" affordance without showing the empty state prematurely.
     private(set) var isScanning: Bool = false
@@ -116,7 +124,7 @@ final class RepoSidebarModel {
     func restoreLastSelection() async {
         guard let path = persistence.settings.lastOpenedRepo else { return }
         if let match = findDiscovered(byPath: path) {
-            selectedRepo = match
+            select(match)
         } else {
             // Repo has disappeared (drive unmounted, folder deleted). Keep
             // the last-opened path in persistence so it may come back later,
