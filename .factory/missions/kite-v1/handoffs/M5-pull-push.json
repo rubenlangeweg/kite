@@ -1,0 +1,57 @@
+{
+  "featureId": "M5-pull-push",
+  "salientSummary": "Pull (ff-only) + Push (no force) toolbar buttons wired to NetworkOps; UpstreamSetSheet offers `git push -u` on missing-upstream; SecurityInvariantsTests grep-proves no --force / reset --hard / git clean anywhere in Sources; 6 ViewModel tests + 3 security-invariant tests green (195/195 KiteTests total) + 4 authored XCUITests; VAL-NET-002/003/004 and VAL-SEC-001/002/003 fulfilled.",
+  "whatWasImplemented": "Extended Sources/ViewModels/NetworkOps.swift with pullFFOnly(on:), push(on:currentBranch:) returning PushOutcome (success / needsUpstream(branch:remote:) / failed), and pushWithUpstream(on:branch:remote:). Refactored fetch into a shared runStreaming(on:args:progressLabel:) helper that handles begin-progress → stream stderr → ProgressParser → classify-on-error → toast outcome; fetch/pull/push share this helper with their own arg vectors. Error classification uses the M1-fix-git-error-push-cases GitError cases: auth, nonFastForward, noUpstream, remoteRejected, hookRejected, protectedBranch. Added Sources/Views/Toolbar/PullToolbarButton.swift (arrow.down.circle icon, VAL-NET-002 wiring) and Sources/Views/Toolbar/PushToolbarButton.swift (arrow.up.circle icon, reads current branch via `git symbolic-ref --short HEAD`, presents UpstreamSetSheet on .needsUpstream; sheet never auto-confirms). Wired Pull + Push ToolbarItem(.primaryAction) beside FetchToolbarButton in RootView. Added Tests/KiteTests/ViewModelTests/NetworkOpsPullPushTests.swift (6 tests using bare-remote + author + tracker fixtures). Added Tests/KiteTests/SecurityInvariantsTests.swift (3 grep-based invariants over Sources/ — walks via #filePath, catches --force / reset --hard / git clean). Added Tests/KiteUITests/PullPushUITests.swift (4 XCUITests — authored, deferred per AGENTS.md KiteUITests skip until host TCC grants).",
+  "whatWasLeftUndone": "KiteUITests suite remains deferred until host macOS accepts Accessibility + Automation prompts for xcodebuild (documented in AGENTS.md). XCUITests committed but not executed.",
+  "verification": {
+    "commandsRun": [
+      { "command": "xcodegen generate", "exitCode": 0, "observation": "Project regenerated cleanly." },
+      { "command": "xcodebuild -scheme Kite -configuration Debug build", "exitCode": 0, "observation": "BUILD SUCCEEDED" },
+      { "command": "xcodebuild test -scheme Kite -destination 'platform=macOS' -configuration Debug -only-testing:KiteTests -skip-testing:KiteTests/RepoSidebarSnapshotTests -skip-testing:KiteTests/SettingsRootsTabSnapshotTests", "exitCode": 0, "observation": "195 tests in 29 suites passed after ~81s (includes 6 NetworkOpsPullPushTests + 3 SecurityInvariantsTests added by this feature)." },
+      { "command": "swiftformat Sources Tests --lint", "exitCode": 0, "observation": "0/115 files require formatting." },
+      { "command": "swiftlint --strict", "exitCode": 0, "observation": "Found 0 violations, 0 serious in 115 files." }
+    ],
+    "interactiveChecks": [
+      { "action": "UI verification deferred: XCUITest harness blocked by host TCC; authored suite Tests/KiteUITests/PullPushUITests.swift is committed for later run.", "observed": "Not run in this environment — call out explicitly per swiftui-worker SKILL step 8." }
+    ]
+  },
+  "tests": {
+    "added": [
+      {
+        "file": "Tests/KiteTests/ViewModelTests/NetworkOpsPullPushTests.swift",
+        "cases": [
+          { "name": "pullFFOnlyAppliesCleanFetch", "verifies": "VAL-NET-002" },
+          { "name": "pullFFOnlyFailsOnDivergedHistory", "verifies": "VAL-NET-002" },
+          { "name": "pushSucceedsWhenTracked", "verifies": "VAL-NET-003" },
+          { "name": "pushDetectsMissingUpstream", "verifies": "VAL-NET-003" },
+          { "name": "pushWithUpstreamSets", "verifies": "VAL-NET-003" },
+          { "name": "pushDoesNotForce", "verifies": "VAL-SEC-001" }
+        ]
+      },
+      {
+        "file": "Tests/KiteTests/SecurityInvariantsTests.swift",
+        "cases": [
+          { "name": "noForceFlagInSource", "verifies": "VAL-SEC-001" },
+          { "name": "noResetHardInSource", "verifies": "VAL-SEC-002" },
+          { "name": "noGitCleanInSource", "verifies": "VAL-SEC-003" }
+        ]
+      },
+      {
+        "file": "Tests/KiteUITests/PullPushUITests.swift",
+        "cases": [
+          { "name": "testPullButtonFires", "verifies": "VAL-NET-002" },
+          { "name": "testPushUpstreamSheetAppears", "verifies": "VAL-NET-003" },
+          { "name": "testPushConfirmActuallyPushes", "verifies": "VAL-NET-003" },
+          { "name": "testPushNonFFShowsError", "verifies": "VAL-NET-002" }
+        ]
+      }
+    ]
+  },
+  "discoveredIssues": [
+    {
+      "severity": "non-blocking",
+      "description": "SwiftFormat's `redundantSendable` rule strips explicit `Sendable` conformance from internal enums (PushOutcome). Swift auto-synthesises Sendable for enums whose cases are Sendable, so behaviour is unchanged, but the spec's literal signature `enum PushOutcome: Sendable, Equatable` is now `enum PushOutcome: Equatable`. Document explicitly for orchestrator visibility.",
+      "affectsFeature": "M5-pull-push"
+    }
+  ]
+}

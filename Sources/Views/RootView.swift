@@ -32,6 +32,14 @@ struct RootView: View {
             ToolbarItem(placement: .primaryAction) {
                 FetchToolbarButton()
             }
+            // VAL-NET-002 / VAL-UI-002: Pull (fast-forward only) beside Fetch.
+            ToolbarItem(placement: .primaryAction) {
+                PullToolbarButton()
+            }
+            // VAL-NET-003 / VAL-UI-002: Push (no force) beside Pull.
+            ToolbarItem(placement: .primaryAction) {
+                PushToolbarButton()
+            }
         }
         .overlay(alignment: .bottom) {
             // VAL-UI-004: toast stack anchored at the bottom of the window,
